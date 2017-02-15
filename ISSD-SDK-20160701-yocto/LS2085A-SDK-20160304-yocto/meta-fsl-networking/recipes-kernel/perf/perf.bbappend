@@ -1,0 +1,2 @@
+DEPENDS += "xz"
+PARALLEL_MAKE = ""

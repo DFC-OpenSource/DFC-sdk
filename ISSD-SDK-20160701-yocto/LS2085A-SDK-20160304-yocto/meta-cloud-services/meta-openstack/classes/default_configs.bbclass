@@ -1,0 +1,1 @@
+OS_DEFAULT_INITSCRIPT_PARAMS ??= "defaults 30 10"

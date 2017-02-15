@@ -1,0 +1,83 @@
+Summary
+=======
+
+This document is not intended to provide detail of how Keystone in general
+works, but rather it highlights how Keystone is integrated/configured into
+meta-cloud-services and also describes how Keystone is tested to ensure that
+Keystone Verification and Benchmarking components are working correctly.
+
+
+Keystone Overview
+==============
+
+Keystone provides authentication, authorization and service discovery 
+mechanisms via HTTP primarily for use by projects in the OpenStack family. It 
+is most commonly deployed as an HTTP interface to existing identity systems,
+such as LDAP.
+
+Keystone Deployment
+================
+
+Keystone is configured to use existing deployment (by using deployment
+configuration file /etc/keystone/keystone{.conf,paste.ini}).  In addition to the
+default configuration files, meta-cloud-services installs a custom httpd file
+apache configuration as /etc/apache2/conf.d/wsgi-keystone.conf along with
+adding the 8081 port to the default /etc/apache2/httpd.conf.  This file
+starts a vhost on port 8081 which will be the replacement for the default server
+running on port 35357 and 5000 in the future.
+
+
+Keystone Verification
+==================
+
+By default, Keystone verification performs the following steps:
+
+* git clone tempest source from upstream
+* setup virtualenv for this tempest
+* setup testr environment with virtualenv created above
+* create tempest.conf for this tempest
+* use testr and subunit.run module to run tempest
+
+However, meta-cloud-services already includes tempest which is also 
+configured/modified to have low failure/error testcases, therefore it's desired
+to use this tempest (without using virtualenv) instead of letting Rally to
+download tempest and running it on virtualenv.
+
+
+The option "existing_tempest_config" in /etc/keystone/keystone.conf can be used
+to configure Keystone to either use the existing tempest or to download from
+upstream.
+
+If the option "existing_tempest_config" is not set then Keystone follows the 
+default path.  If "existing_tempest_config" is set to absolute path of tempest
+config folder (which contains tempest "tools" and .testr.conf, e.g. 
+/etc/tempest) then Rally uses this existing tempest.  By default,
+"existing_tempest_config" is set to "/etc/tempest/".
+
+
+Build Configuration Options
+===========================
+
+To have Keystone and tempest included in final built image, include layer
+meta-openstack-controller-test-config into Controller build and
+layer meta-openstack-compute-test-config into Compute build.
+
+
+Keystone Built-In Unit Tests
+=========================
+
+This section describes how to run Keystone built-in unit
+tests which are located at:
+
+    /usr/lib64/python2.7/site-packages/keystone/tests
+
+To run Keystone built-in unit test with nosetests:
+
+    $ cd /usr/lib64/python2.7/site-packages/keystone/tests
+    $ nosetests -v
+
+
+References
+==========
+
+https://wiki.openstack.org/wiki/Keystone

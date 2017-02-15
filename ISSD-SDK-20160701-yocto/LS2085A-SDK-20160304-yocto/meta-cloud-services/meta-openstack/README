@@ -1,0 +1,56 @@
+meta-openstack
+===================
+
+This layer provides support for building the packages from the OpenStack project.
+The layer contains recipes for the nova, glance, keystone, cinder, quantum, swift
+and horizon components.
+
+Dependencies
+------------
+
+This layer depends on:
+
+URI: git://github.com/openembedded/oe-core.git
+branch: master
+revision: HEAD
+prio: default
+
+URI: git://github.com/openembedded/meta-oe.git
+revision: HEAD
+layers: meta-oe
+	meta-networking
+        meta-ruby
+        meta-filesystems
+        meta-webserver
+        meta-python
+
+URI: git://git.yoctoproject.org/meta-virtualization
+branch: master
+revision: head
+
+Maintenance
+-----------
+
+Send pull requests, patches, comments or questions to meta-virtualization@yoctoproject.org
+
+When sending single patches, please using something like:
+'git send-email -1 --to meta-virtualization@yoctoproject.org --subject-prefix=meta-virtualization][PATCH'
+
+Maintainers: Bruce Ashfield <bruce.ashfield@windriver.com>
+
+License
+-------
+
+All metadata is MIT licensed unless otherwise stated. Source code included
+in tree for individual recipes is under the LICENSE stated in each recipe
+(.bb file) unless otherwise stated.
+
+Target images
+-------------
+
+Target images: openstack-image-compute, openstack-image-network, openstack-image-controller.
+
+They contain the packagegroups with the same name and can be used to create
+the types of targets. There are no extra configurations required to build
+these images. See README.setup for more details.
+

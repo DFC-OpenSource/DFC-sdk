@@ -1,0 +1,142 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:          neutron-server
+# Required-Start:    $remote_fs $syslog
+# Required-Stop:     $remote_fs $syslog
+# Default-Start:     2 3 5
+# Default-Stop:      0 1 6
+# Short-Description: neutron-server
+# Description:       Provides the Quantum networking service
+### END INIT INFO
+
+DESC="neutron-server"
+DAEMON="/usr/bin/neutron-server"
+PIDFILE="/var/run/neutron-server.pid"
+DAEMON_ARGS="--config-file=/etc/neutron/neutron.conf \
+  --config-file=@plugin@ \
+  --log-dir=/var/log/neutron"
+
+start() 
+{
+    if [ -e $PIDFILE ]; then
+        PIDDIR=/proc/$(cat $PIDFILE)
+        if [ -d ${PIDDIR} ]; then
+            echo "$DESC already running."
+            exit 1
+        else
+            echo "Removing stale PID file $PIDFILE"
+            rm -f $PIDFILE
+        fi
+    fi
+
+    if [ ! -d /var/log/neutron ]; then
+        mkdir /var/log/neutron
+    fi
+
+    echo -n "Starting $DESC..."
+
+    start-stop-daemon --start --quiet --background \
+        --pidfile ${PIDFILE} --make-pidfile --exec ${DAEMON} \
+	    -- $DAEMON_ARGS
+
+    if [ $? -eq 0 ]; then
+        echo "done."
+    else
+        echo "failed."
+    fi
+}
+
+stop() 
+{
+    echo -n "Stopping $DESC..."
+    start-stop-daemon --stop --quiet --pidfile $PIDFILE
+    if [ $? -eq 0 ]; then
+        echo "done."
+    else
+        echo "failed."
+    fi
+    rm -f $PIDFILE
+}
+
+status()
+{
+    pid=`cat $PIDFILE 2>/dev/null`
+    if [ -n "$pid" ]; then
+        if ps -p $pid > /dev/null 2>&1 ; then
+            echo "$DESC is running"
+            return
+        fi
+    fi
+    echo "$DESC is not running"
+}
+
+reset()
+{
+    . /etc/nova/openrc
+
+    # Cleanup all neutron floating ip
+    simple_delete "neutron floatingip-list --all-tenant" "neutron floatingip-delete" 1 "neutron floatingip"
+
+    # Cleanup all neutron router
+    neutron router-list | while read line; do
+        router_id=`echo $line | get_field 1`
+        neutron router-port-list $router_id | while read line_port; do
+            port_id=`echo $line_port | get_field 1`
+            subnet_id=`echo $line_port | get_field 4 | cut -d ' ' -f 2 | cut -d '"' -f 2`
+            if [ ! -z "$router_id" ] && [ ! -z "$subnet_id" ] ; then
+                echo ">>> Delete router-port: router_id=$router_id, port_id=$port_id, subnet_id=$subnet_id"
+                neutron router-interface-delete $router_id $subnet_id > /dev/null 2>&1
+            fi
+        done
+        if [ ! -z "$router_id" ] ; then
+            echo ">>> Delete router: router_id=$router_id"
+            neutron router-delete $router_id > /dev/null 2>&1
+        fi
+    done
+
+    # Cleanup all neutron ports
+    simple_delete "neutron port-list --all-tenant" "neutron port-delete" 1 "neutron port"
+
+    # Cleanup all neutron net
+    simple_delete "neutron net-list --all-tenant" "neutron net-delete" 1 "neutron net"
+
+    stop
+
+    # This is to make sure postgres is configured and running
+    if ! pidof postmaster > /dev/null; then
+        /etc/init.d/postgresql-init
+        /etc/init.d/postgresql start
+        sleep 2
+    fi
+
+    sudo -u postgres dropdb ovs_neutron
+    sudo -u postgres createdb ovs_neutron
+
+    start
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart|force-reload|reload)
+        stop
+        start
+        ;;
+    status)
+	status
+        ;;
+    reset)
+	reset
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|force-reload|restart|reload|status|reset}"
+        exit 1
+        ;;
+esac
+
+exit 0

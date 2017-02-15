@@ -1,0 +1,208 @@
+Networking
+==============
+
+Description
+-----------
+OpenStack provides tools to setup many different network topologies using
+tunnels, Vlans, GREs... the list goes on. In this document we describe how to
+setup 3 basic network configurations which can be used as building blocks for a
+larger network deployment. Going through these setups also tests that the
+Open vSwitch plugin and DHCP and l3 agents are operating correctly.
+
+
+Assumptions
+-----------
+The following assumes you have built the controller and compute nodes for the
+qemux86-64 machine as described in README.setup and have been able to spin-up an
+instance successfully.
+
+
+Prerequisites
+-------------
+
+1. Following the instructions in README.setup to spin-up your controller and
+compute nodes in VMs will result in NATed tap interfaces on the host. While this
+is fine for basic use it will not allow you to use things like GRE tunnels as
+the packet will appear to be coming from the host when it arrives at the other
+end of the tunnel and will therefore be rejected (since the src IP will not
+match the GRE's remote_ip). To get around this we must setup an Open vSwitch
+bridge on the host and attach the taps. Open vSwitch must therefore be installed
+and running on the host.
+
+On Ubuntu systems this may be done via:
+sudo apt-get install openvswitch-switch openvswitch-common
+
+2. Also since we will be using an Open vSwitch on the host we need to ensure the
+controller and compute network interfaces have different MAC addresses. We
+therefor must modify the runqemu script as per the following:
+
+--- a/scripts/runqemu-internal
++++ b/scripts/runqemu-internal
+@@ -252,7 +252,7 @@ else
+         KERNEL_NETWORK_CMD="ip=192.168.7.$n2::192.168.7.$n1:255.255.255.0"
+         QEMU_TAP_CMD="-net tap,vlan=0,ifname=$TAP,script=no,downscript=no"
+         if [ "$KVM_ACTIVE" = "yes" ]; then                                                                                                                                                                  
+-            QEMU_NETWORK_CMD="-net nic,model=virtio $QEMU_TAP_CMD,vhost=on"
++            QEMU_NETWORK_CMD="-net nic,macaddr=52:54:00:12:34:$(printf '%x' $((RANDOM % 170))),model=virtio $QEMU_TAP_CMD,vhost=on"
+             DROOT="/dev/vda"
+             ROOTFS_OPTIONS="-drive file=$ROOTFS,if=virtio"
+         else
+---
+this will not guarantee distinct MAC addresses but most of the time they will be.
+
+
+Host Open vSwitch bridge
+------------------------
+As per the prerequisites we need to setup a bridge on the host to avoid NATed
+tap interfaces. After you have used 'runqemu' to boot your controller and
+compute nodes perform the following instructions on your host
+
+(I will assume tap0 - controller, tap1 - compute, use 'ip a s' or 'ifconfig' to
+identify the tap interfaces)
+
+sudo ovs-vsctl add-br br-int
+sudo ovs-vsctl add-port br-int tap0
+sudo ovs-vsctl add-port br-int tap1
+sudo ip address del 192.168.7.1/24 dev tap0
+sudo ip address del 192.168.7.3/24 dev tap1
+sudo ip address add 192.168.7.1/24 broadcast 192.168.7.255 dev br-int
+sudo route del 192.168.7.2 tap0
+sudo route del 192.168.7.4 tap1
+
+
+NOTE: Any time you reboot the controller or compute nodes you will
+want to remove and re-add the port via:
+# ovs-vsctl del-port br-int tapX
+# ovs-vsctl add-port br-int tapX
+# ip address del 192.168.7.Y/24 dev tapX
+(where X and Y are substituted accordingly)
+This will also ensure the ARP tables in the vSwitch are updated since
+chances are the MAC address will have changed on a reboot due to the
+MAC randomizer of prerequisite 2.
+
+
+Controller/Compute network setup
+--------------------------------
+The neutron Open vSwitch plugin expects several bridges to exist on
+the controller and compute nodes. When the controller and compute
+nodes are first booted however these do not exist and depending on how
+you are setting up your network this is subject to change and as such
+is not 'baked' in to our images. This would normally be setup by
+cloud-init, chef, cobbler or some other deployment scripts. Here we
+will accomplish it by hand.
+
+On first boot your network will look like this: (controller node)
+---snip---
+root@controller:~# ip a show eth0
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
+    link/ether 52:54:00:12:34:a9 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.7.2/24 brd 192.168.7.255 scope global eth0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::5054:ff:fe12:34a9/64 scope link 
+       valid_lft forever preferred_lft forever
+
+root@controller:~# ovs-vsctl show
+524a6c84-226d-427b-8efa-732ed7e7fa43
+    Bridge br-int
+        Port patch-tun
+            Interface patch-tun
+                type: patch
+                options: {peer=patch-int}
+        Port br-int
+            Interface br-int
+                type: internal
+    Bridge br-tun
+        Port br-tun
+            Interface br-tun
+                type: internal
+        Port patch-int
+            Interface patch-int
+                type: patch
+                options: {peer=patch-tun}
+    ovs_version: "2.0.0"
+---snip---
+
+To complete the expected network configuration you must add a bridge
+which will contain the physical interface as one of its ports and move
+the IP address from the interface to the bridge. The following will
+accomplish this:
+
+ovs-vsctl add-br br-eth0
+ovs-vsctl add-port br-eth0 eth0
+ip address del 192.168.7.2/24 dev eth0
+ip address add 192.168.7.2/24 broadcast 192.168.7.255 dev br-eth0
+route add default gw 192.168.7.1
+
+And now you network will look like the following:
+---snip---
+root@controller:~# ip a s
+...skip
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast master ovs-system state UP group default qlen 1000
+    link/ether 52:54:00:12:34:a9 brd ff:ff:ff:ff:ff:ff
+...skip
+7: br-eth0: <BROADCAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN group default 
+    link/ether ae:f8:be:7c:78:42 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.7.2/24 scope global br-eth0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::e453:1fff:fec1:79ff/64 scope link 
+       valid_lft forever preferred_lft forever
+
+root@controller:~# ovs-vsctl show
+524a6c84-226d-427b-8efa-732ed7e7fa43
+    Bridge "br-eth0"
+        Port "eth0"
+            Interface "eth0"
+        Port "br-eth0"
+            Interface "br-eth0"
+                type: internal
+    Bridge br-int
+        Port patch-tun
+            Interface patch-tun
+                type: patch
+                options: {peer=patch-int}
+        Port br-int
+            Interface br-int
+                type: internal
+    Bridge br-tun
+        Port br-tun
+            Interface br-tun
+                type: internal
+        Port patch-int
+            Interface patch-int
+                type: patch
+                options: {peer=patch-tun}
+    ovs_version: "2.0.0"
+
+At this point you will want to restart the neutron network services
+
+(controller)
+/etc/init.d/neutron-openvswitch-agent stop
+/etc/init.d/neutron-dhcp-agent stop
+/etc/init.d/neutron-server reload
+/etc/init.d/neutron-dhcp-agent start
+/etc/init.d/neutron-openvswitch-agent start
+
+(Compute)
+/etc/init.d/neutron-openvswitch-agent stop
+/etc/init.d/nova-compute reload
+/etc/init.d/neutron-openvswitch-agent start
+
+
+NOTE: on a reboot the Open vSwitch configuration will remain but at
+this point in time you will need to manually move the IP address from
+the eth0 interface to the br-eth0 interface using
+
+ip address del 192.168.7.2/24 dev eth0
+ip address add 192.168.7.2/24 broadcast 192.168.7.255 dev br-eth0
+
+With this network configuration on the controller and similar
+configuration on the compute node (just replace 192.168.7.2 with
+192.168.7.4) everything is ready to configure any of the 3 network
+sample configurations.
+
+Further reading
+---------------
+
+README.networking_flat
+README.networking_vlan
+README.networking_l3_router

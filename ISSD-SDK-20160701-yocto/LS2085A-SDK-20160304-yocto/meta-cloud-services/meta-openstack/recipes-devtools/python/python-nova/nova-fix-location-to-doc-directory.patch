@@ -1,0 +1,46 @@
+From 4d74c926b8dd7eaac0c9ddac0d1161f634b69e1d Mon Sep 17 00:00:00 2001
+From: Keith Holman <Keith.Holman@windriver.com>
+Date: Tue, 17 Jun 2014 16:40:51 -0400
+Subject: [PATCH] nova: fix location to doc directory
+
+Currently, the tests included with nova expect the doc directory to be
+in the location they exist in the source tree.  However, during system
+deployment the documentation is installed under the "nova" directory 1
+level higher in the directory tree.  This patch fixes the relative
+path to be able to find the files.
+
+Signed-off-by: Keith Holman <Keith.Holman@windriver.com>
+---
+ nova/tests/integrated/api_samples_test_base.py | 2 +-
+ nova/tests/integrated/v3/api_sample_base.py    | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/nova/tests/integrated/api_samples_test_base.py b/nova/tests/integrated/api_samples_test_base.py
+index 6acb5a1..31caa6c 100644
+--- a/nova/tests/integrated/api_samples_test_base.py
++++ b/nova/tests/integrated/api_samples_test_base.py
+@@ -88,7 +88,7 @@ class ApiSampleTestBase(integrated_helpers._IntegratedTestBase):
+     @classmethod
+     def _get_sample(cls, name):
+         dirname = os.path.dirname(os.path.abspath(__file__))
+-        dirname = os.path.normpath(os.path.join(dirname, "../../../doc"))
++        dirname = os.path.normpath(os.path.join(dirname, "../../doc"))
+         return cls._get_sample_path(name, dirname)
+ 
+     @classmethod
+diff --git a/nova/tests/integrated/v3/api_sample_base.py b/nova/tests/integrated/v3/api_sample_base.py
+index aa1ca8f..d22a2c8 100644
+--- a/nova/tests/integrated/v3/api_sample_base.py
++++ b/nova/tests/integrated/v3/api_sample_base.py
+@@ -71,7 +71,7 @@ class ApiSampleTestBaseV3(api_samples_test_base.ApiSampleTestBase):
+     @classmethod
+     def _get_sample(cls, name):
+         dirname = os.path.dirname(os.path.abspath(__file__))
+-        dirname = os.path.normpath(os.path.join(dirname, "../../../../doc/v3"))
++        dirname = os.path.normpath(os.path.join(dirname, "../../../doc/v3"))
+         return cls._get_sample_path(name, dirname)
+ 
+     @classmethod
+-- 
+1.9.3
+

@@ -1,0 +1,29 @@
+From f38ab6dca56eace1dc64c6d804c528b6cf7e8f3b Mon Sep 17 00:00:00 2001
+From: Andrew Pinski <apinski@cavium.com>
+Date: Mon, 27 Oct 2014 00:59:47 -0700
+Subject: [PATCH 24/32] Add ILP32 ld.so to the known interpreter names.
+
+This patch adds ILP32 ld.so names to the known interpreter names.
+
+* sysdeps/unix/sysv/linux/aarch64/ldconfig.h (SYSDEP_KNOWN_INTERPRETER_NAMES):
+Add ilp32 ld.so names.
+---
+ sysdeps/unix/sysv/linux/aarch64/ldconfig.h | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/sysdeps/unix/sysv/linux/aarch64/ldconfig.h b/sysdeps/unix/sysv/linux/aarch64/ldconfig.h
+index b0e6b6a..a70eafc 100644
+--- a/sysdeps/unix/sysv/linux/aarch64/ldconfig.h
++++ b/sysdeps/unix/sysv/linux/aarch64/ldconfig.h
+@@ -21,6 +21,8 @@
+ #define SYSDEP_KNOWN_INTERPRETER_NAMES \
+   { "/lib/ld-linux-aarch64.so.1", FLAG_ELF_LIBC6 }, \
+   { "/lib/ld-linux-aarch64_be.so.1", FLAG_ELF_LIBC6 }, \
++  { "/lib/ld-linux-aarch64_ilp32.so.1", FLAG_ELF_LIBC6 }, \
++  { "/lib/ld-linux-aarch64_be_ilp32.so.1", FLAG_ELF_LIBC6 }, \
+   { "/lib/ld-linux.so.3", FLAG_ELF_LIBC6 }, \
+   { "/lib/ld-linux-armhf.so.3", FLAG_ELF_LIBC6 },
+ #define SYSDEP_KNOWN_LIBRARY_NAMES \
+-- 
+1.9.3
+

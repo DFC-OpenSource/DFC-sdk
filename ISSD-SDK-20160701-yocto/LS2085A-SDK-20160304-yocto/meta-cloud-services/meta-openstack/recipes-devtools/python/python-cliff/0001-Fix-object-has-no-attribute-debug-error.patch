@@ -1,0 +1,32 @@
+From f2c997161df01579cabf312a694289a1a83ae6ca Mon Sep 17 00:00:00 2001
+From: TerryHowe <terrylhowe@gmail.com>
+Date: Thu, 28 May 2015 07:55:11 -0600
+Subject: [PATCH] Fix object has no attribute debug error
+
+When print_help_if_requested is called, if there is an error,
+"object has no attribute 'debug'" gets printed out.  This is
+because the parser is passed in to the command rather than the
+parsed arguments.
+
+Change-Id: I1863421eff82b3f493d276432369ada9f783b165
+Partial-Bug: #1459519
+---
+ cliff/app.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/cliff/app.py b/cliff/app.py
+index e052571..a41386a 100644
+--- a/cliff/app.py
++++ b/cliff/app.py
+@@ -198,7 +198,7 @@ class App(object):
+     def print_help_if_requested(self):
+         if self.deferred_help and self.options.deferred_help:
+             action = HelpAction(None, None, default=self)
+-            action(self.parser, self.parser, None, None)
++            action(self.parser, self.options, None, None)
+ 
+     def run(self, argv):
+         """Equivalent to the main program for the application.
+-- 
+2.1.0
+

@@ -1,0 +1,219 @@
+openstackchef.bbclass
+=========
+When an openstack image is built for a CONTROLLER, COMPUTE or allinone, 
+there are build-time variables that are hard-coded into the image. 
+These hardcoded variables need to be provided up front at 
+build time and cannot be changed easily at run-time. 
+What this means is that an image built for a specific deployment
+environment cannot be easily deployed to another environment.
+
+Openstackchef class enables openstack related services like, nova, postgresql, 
+neutron, etc to be re-configured at run-time. This means that if all the 
+services of an openstack installation inherits the openstackchef class,
+openstackchef can successfully re-configure an openstack installation. 
+
+For example, at build time, many of the openstack services need to know ahead of
+time, the IP address of the node on which CONTROLLER and COMPUTE will be deployed. 
+Once this IP address is built into the image, it cannot be changed at runtime. 
+In other words, if you build a CONTROLLER image for a machine with IP address 
+of 192.168.7.2, you cannot use that image on a machine with a different IP address.
+
+This is very restrictive, since it does not allow the re-use of CONTROLLER/COMPUTE 
+images.
+
+Openstackchef.bbclass facilitates the reuse of openstack images across multiple
+machines. It does this by providing a mechanism for openstack related services 
+to register all configuration files that have run-time dependent variables like IP 
+address in them.
+
+By inheriting openstackchef, and registering these configuration files
+with openstackchef, the services are no longer tied to a specific
+run-time environment. This is because, openstackchef makes it possible
+for the registered configuration files to be recreated at run-time when
+any of the environment variables changes.
+
+The configuration files are registered with openstackchef by assigning
+them to the variable CHEF_SERVICES_CONF_FILES in the recipe file.
+
+See example below for barbican:
+
+CHEF_SERVICES_CONF_FILES :="\
+    ${sysconfdir}/${SRCNAME}/vassals/barbican-api.ini \
+    ${sysconfdir}/${SRCNAME}/vassals/barbican-admin.ini \
+    "
+Openstackchef makes chef-solo templates out of
+the registered files. At run-time, the deploychef package
+makes a call to chef-solo, which in-turn use the template files
+to recreate the registered configuration files.
+
+Also see additional description in the openstackchef.bbclass header.
+
+In addition to the simple placeholder/value substitution that is 
+done by the openstackchef class when creating the templates, 
+there are times when recipes need to do morethan a simple placeholder 
+substitution. For cases like these, openstackchef provides a mechanism for 
+the recipes to provide a special callback function. Openstackchef class 
+then makes a call to this special callback function to do any additional substitution.
+
+The special shell callback function is registered with openstackchef by 
+assigning it to the variable CHEF_SERVICES_SPECIAL_FUNC.
+
+The python-neutron recipe defines a special function and specifies it
+as shown below.
+
+CHEF_SERVICES_SPECIAL_FUNC := "deploychef_services_special_func"
+
+Whenever the configuration files of any openstack service
+changes, the service usually needs to reload the configuration file. 
+The list of scripts/priority levels responsible for restarting 
+the service when its configuration files change are assumed to 
+be provided by the following variables:
+
+INITSCRIPT_PACKAGES
+INITSCRIPT_NAME_x or INITSCRIPT_NAME
+INITSCRIPT_PARAMS_x or INITSCRIPT_PARAMS
+
+Here is an example of how python-barbican specifies these variables.
+INITSCRIPT_PACKAGES = "${SRCNAME}"
+INITSCRIPT_NAME_${SRCNAME} = "barbican-api"
+INITSCRIPT_PARAMS_${SRCNAME} = "${OS_DEFAULT_INITSCRIPT_PARAMS}"
+
+In addition, there are services that might need to be restarted but does 
+not necessary have a configuration file. These services can also advertise 
+themselves to openstackchef with the above variables.
+
+However, failure to provide appropriate values for the above variables after 
+registering a set of configuration files for an openstack service will
+lead to the service not working properly.
+
+Dependencies
+------------
+This class depends on the deploychef package for run-time implementation of 
+the class. However, the end user does not have to do anything about this 
+dependency, because it's resolved at build time and all deploychef package
+files are automatically included on the rootfs of resulting image.
+Openstackchef class creates the template files used by the deploychef package 
+to reconfigure an openstack node.
+
+Deploychef executes chefsolo at run-time to recreate
+the configuration files for openstack services from template files
+created by openstackchef.bbclass at build time.
+Chefsolo in turn uses the attributes and templates files to overwrite
+the configuration files for services like neutron, nova, swift, etc..
+that had registered their configuration files with openstackchef class
+at build time.
+
+The base directory for the deploychef package is /opt/deploychef.
+There are many files that goes into the re-configuration of an 
+openstack deployment, however, two are worth mentioning.
+
+1 . Default variables in openstack and the values they hold can be found in: 
+
+/opt/deploychef/cookbooks/openstack/attributes/default.rb
+
+2. A shell script file that should be executed to reconfigure the stack 
+on CONTROLLER, COMPUTE or allinone nodes.
+
+/opt/deploychef/run-deploychef
+
+The script file above should be executed when any of the run-time environment
+variables found at /opt/deploychef/cookbooks/openstack/attributes/default.rb
+is changed. 
+
+Run-time
+-------
+Allinone: An allinone node boots-up with openstack re-configured and all services
+accessible either through the command-line or through horizon.
+
+CONTROLLER & COMPUTE:
+Both CONTROLLER and COMPUTE nodes boots-up with their respective IP address  
+updated using the IP address on the interface of the machine on which they run.
+
+For the CONTROLLER, you should be able to access horizon at this point. However,
+both the CONTROLLER and COMPUTE are not aware of each other at this point.
+
+For them to be made aware of each other, we need to inform the COMPUTE node of 
+the location of the CONTROLLER node, similarly, we need to inform the CONTROLLER
+node about the location of the COMPUTE node. 
+
+In order to accomplish this on each node, edit IP address field in the file
+
+/opt/deploychef/cookbooks/openstack/attributes/default.rb
+
+On the CONTROLLER node, change COMPUTE's IP address to the IP address 
+of the machine on which you have openstack COMPUTE deployed.
+
+Assuming COMPUTE's IP address was set to "192.168.7.4" at build-time and the
+current IP address of the machine on which you have COMPUTE deployed is
+"128.224.149.164". Then the line 
+
+default["COMPUTE_IP"] = "192.168.7.4"
+
+should be changed to
+
+default["COMPUTE_IP"] = "128.224.149.164"
+
+
+Now cd into the base directory of deploychef and execute the script
+'run-deploychef'.
+
+cd /opt/deploychef
+./run-deploychef
+
+Note: It's important that you 'cd' into /opt/deploychef when running
+run-deploychef script, because this script makes a call to chefsolo which 
+references files from /opt/depoychef base directory.
+
+Wait for the script to finish executing and you are shown the prompt.
+
+In a similar vein, repeat the above process on the COMPUTE node, but this 
+time, it's the CONTROLLER's IP address you will be changing. Leave the COMPUTE's 
+IP address as is.
+Assuming CONTROLLER's IP address was set to "192.168.7.2" at build-time and the
+current IP address of the machine on which you have CONTROLLER deployed is
+"128.224.149.162". Then the line 
+
+default["CONTROLLER_IP"] = "192.168.7.2"
+
+should be changed to
+
+default["CONTROLLER_IP"] = "128.224.149.162"
+
+
+Again 'cd' into the base directory of deploychef and execut the script
+'run-deploychef'.
+
+cd /opt/deploychef
+./run-deploychef
+
+
+At this point, both COMPUTE and CONTROLLER have been configured and should be 
+communicating with one another.
+
+Maintenance
+-----------
+This class is maintained by Wind River Systems, Inc.
+Contact <support@windriver.com> or your support representative for more
+information on submitting changes.
+
+
+Building with openstack.bbclass
+-------------------------
+This class should be inherited by recipe/class files of openstack services in order 
+for the functionality described above to work. 
+If any component of openstack is left out, that component will
+not work correctly when the stack is reconfigured at run-time, and as a result,
+the openstack deployment will not work.
+
+
+License
+-------
+Copyright (C) 2014 Wind River Systems, Inc.
+
+The right to copy, distribute or otherwise make use of this software may
+be licensed only pursuant to the terms of an applicable Wind River license
+agreement.  No license to Wind River intellectual properly rights is granted
+herein.  All rights not licensed by Wind River are reserved by Wind River.
+
+Source code included in tree is under the LICENSE
+stated in class file (.bbclass file) unless other stated.

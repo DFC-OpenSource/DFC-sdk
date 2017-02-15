@@ -1,0 +1,9 @@
+{
+    "type": "ExistingCloud",
+    "endpoint": {
+        "auth_url": "http://%CONTROLLER_IP%:8081/keystone/main",
+        "username": "%ADMIN_USER%",
+        "password": "%ADMIN_PASSWORD%",
+        "tenant_name": "%ADMIN_TENANT_NAME%"
+    }
+}

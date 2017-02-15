@@ -1,0 +1,32 @@
+From aa0f004fa421cdd9e0674934d3e66d1dcd8bde07 Mon Sep 17 00:00:00 2001
+From: Keith Holman <Keith.Holman@windriver.com>
+Date: Tue, 17 Jun 2014 16:51:22 -0400
+Subject: [PATCH] nova: fix location to plugin directory
+
+Currently, the tests included with nova expect the plugin directory to
+be in the location they exist in the source tree.  However, during
+system deployment the plugins are installed under the "nova" directory
+one level higher in the directory tree.  This patch fixes the relative
+path to be able to find the files.
+
+Signed-off-by: Keith Holman <Keith.Holman@windriver.com>
+---
+ nova/tests/virt/xenapi/test_xenapi.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/nova/tests/virt/xenapi/test_xenapi.py b/nova/tests/virt/xenapi/test_xenapi.py
+index 9a45bf0..88f8a76 100644
+--- a/nova/tests/virt/xenapi/test_xenapi.py
++++ b/nova/tests/virt/xenapi/test_xenapi.py
+@@ -4013,7 +4013,7 @@ class XenAPISessionTestCase(test.NoDBTestCase):
+ 
+         # Import the plugin to extract its version
+         path = os.path.dirname(__file__)
+-        rel_path_elem = "../../../../plugins/xenserver/xenapi/etc/xapi.d/" \
++        rel_path_elem = "../../../plugins/xenserver/xenapi/etc/xapi.d/" \
+             "plugins/nova_plugin_version"
+         for elem in rel_path_elem.split('/'):
+             path = os.path.join(path, elem)
+-- 
+1.9.3
+

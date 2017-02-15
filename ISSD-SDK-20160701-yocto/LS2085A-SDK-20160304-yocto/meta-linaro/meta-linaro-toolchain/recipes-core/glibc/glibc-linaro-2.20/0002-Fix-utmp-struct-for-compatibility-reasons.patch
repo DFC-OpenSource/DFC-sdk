@@ -1,0 +1,53 @@
+From 546464783ad948f4ac2061aff08ec79b9f913f71 Mon Sep 17 00:00:00 2001
+From: Andrew Pinski <apinski@cavium.com>
+Date: Mon, 27 Oct 2014 00:59:25 -0700
+Subject: [PATCH 02/32] Fix utmp struct for compatibility reasons.
+
+NOTE This is an ABI change for AARCH64.
+If you have some AARCH32 and AARCH64 applications and they both use
+utmp, one of them will fail due to the use of time_t inside the
+utmp binary format.
+
+This fixes the problem by setting __WORDSIZE_TIME64_COMPAT32.
+
+* sysdeps/aarch64/bits/wordsize.h: New file.
+---
+ sysdeps/aarch64/bits/wordsize.h | 26 ++++++++++++++++++++++++++
+ 1 file changed, 26 insertions(+)
+ create mode 100644 sysdeps/aarch64/bits/wordsize.h
+
+diff --git a/sysdeps/aarch64/bits/wordsize.h b/sysdeps/aarch64/bits/wordsize.h
+new file mode 100644
+index 0000000..3ecccaa
+--- /dev/null
++++ b/sysdeps/aarch64/bits/wordsize.h
+@@ -0,0 +1,26 @@
++/* Copyright (C) 2014 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, see
++   <http://www.gnu.org/licenses/>.  */
++
++#define __WORDSIZE	64
++
++/* LP64 ABI has a 64bit time_t.
++   This allows aarch32 and AARCH64 applications
++   both access utmp. */
++#define __WORDSIZE_TIME64_COMPAT32	1
++
++/* LP64 use the 64bit system call interface. */
++#define __SYSCALL_WORDSIZE 64
+-- 
+1.9.3
+

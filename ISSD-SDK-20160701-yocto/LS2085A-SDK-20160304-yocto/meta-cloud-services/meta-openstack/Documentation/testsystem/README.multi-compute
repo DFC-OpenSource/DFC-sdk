@@ -1,0 +1,150 @@
+0. configure configuration files with auto_destroy enabled and auto_assign_ip disabled and specify the
+   IP addresses of the controller and the compute node as configured during the build
+
+e.g. if the DHCP is supported
+
+[main]
+network: 192.168.7.1
+emulator: /usr/bin/qemu-system-x86_64
+auto_destroy: True
+auto_assign_ip: True
+
+[controller]
+kernel: $HOME/images/bzImage
+disk: $HOME/images/controller.ext3
+
+[computeA]
+kernel: $HOME/images/bzImage
+disk: $HOME/images/compute.ext3
+
+[computeB]
+kernel: $HOME/images/bzImage
+disk: $HOME/images/computeB.ext3
+
+Start instances:
+<launch.py> <config file> start
+
+e.g. if the IP address are specified in build time IP
+
+For the controller:
+
+The build time IP in layers/meta-cloud-services -
+layers//meta-cloud-services/meta-openstack-controller-deploy/classes/hosts.bbclass
+layers//meta-cloud-services/meta-openstack-compute-deploy/classes/hosts.bbclass
+CONTROLLER_IP ?= "128.224.149.121"
+
+Use the controller's ip in the test system's configuration file:
+
+[controller]
+ip: 128.224.149.121
+
+For each compute, use the controller's IP in the bitbake build's build time IP and
+use the compute node's ip accordingly
+
+computeA
+The build time IP in layers/meta-cloud-services -
+layers//meta-cloud-services/meta-openstack-controller-deploy/classes/hosts.bbclass
+layers//meta-cloud-services/meta-openstack-compute-deploy/classes/hosts.bbclass
+CONTROLLER_IP ?= "128.224.149.121"
+COMPUTE_IP ?= "128.224.149.122"
+
+computeB
+The build time IP in layers/meta-cloud-services -
+layers//meta-cloud-services/meta-openstack-controller-deploy/classes/hosts.bbclass
+layers//meta-cloud-services/meta-openstack-compute-deploy/classes/hosts.bbclass
+CONTROLLER_IP ?= "128.224.149.121"
+COMPUTE_IP ?= "128.224.149.123"
+
+And in the test system's configuration file:
+
+[controller]
+ip: 128.224.149.121
+
+[computeA]
+ip: 128.224.149.122
+
+[computeB]
+ip: 128.224.149.123
+
+Start instances:
+<launch.py> <config file> start
+
+
+1./etc/hosts - adjust for hostnames
+
+On controller/compute nodes, configure your DNS or /etc/hosts and ensure
+it is consistent across all hosts. Make sure that the three hosts can
+perform name resolution with each other. As a test, use the ping command
+to ping each host from one another.
+
+$ ping HostA
+$ ping HostB
+$ ping HostC
+
+e.g.  /etc/hosts
+127.0.0.1       localhost.localdomain           localhost
+
+192.168.7.2 controller
+192.168.7.4 computeA
+192.168.7.6 computeB
+
+2. Configure NFS host on controller
+
+/etc/nova/instances needs to be a shared directory for migration to work.
+
+Configure the controller to export this as an NFS export.
+
+cat >> /etc/exports << 'EOF'
+/etc/nova/instances *(rw,no_subtree_check,insecure,no_root_squash)
+EOF
+exportfs -a
+
+On compute nodes:
+mount controller:/etc/nova/instances /etc/nova/instances/
+
+
+3. Make sure the controller can see the compute nodes
+
+nova service-list
+
+root@controller:/etc/nova/instances# nova service-list
++------------------+------------+----------+---------+-------+----------------------------+-----------------+
+| Binary           | Host       | Zone     | Status  | State | Updated_at                 | Disabled Reason |
++------------------+------------+----------+---------+-------+----------------------------+-----------------+
+| nova-compute     | computeA   | nova     | enabled | up    | 2014-05-16T17:14:24.617143 | -               |
+| nova-compute     | computeB   | nova     | enabled | up    | 2014-05-16T17:14:25.228089 | -               |
+| nova-conductor   | controller | internal | enabled | up    | 2014-05-16T17:14:26.932751 | -               |
+| nova-scheduler   | controller | internal | enabled | up    | 2014-05-16T17:14:26.984656 | -               |
+| nova-consoleauth | controller | internal | enabled | up    | 2014-05-16T17:14:27.007947 | -               |
+| nova-cert        | controller | internal | enabled | up    | 2014-05-16T17:14:27.030701 | -               |
+| nova-network     | controller | internal | enabled | up    | 2014-05-16T17:14:27.031366 | -               |
++------------------+------------+----------+---------+-------+----------------------------+-----------------+
+
+root@controller:~# nova hypervisor-list
++----+---------------------+
+| ID | Hypervisor hostname |
++----+---------------------+
+| 1  | computeA            |
+| 2  | computeB            |
++----+---------------------+
+
+Login to horizon, and select hypervisors, both nodes will be seen
+
+
+4. Bootup a guest from the controller:
+
+On controller:
+glance image-create --name myFirstImage --is-public true --container-format bare --disk-format qcow2 --file images/cirros-0.3.0-x86_64-disk.img
+neutron  net-create mynetwork
+nova boot --image myFirstImage --flavor 1 myinstance
+
+5. Do migration from horizon
+
+From horizon, goto instances, myinstance should be running
+wait til myinstance is in running state
+
+In Actions, select: Migrate Instance
+Select: Confirm migrate/resize when promted
+
+myinstance is now running from the other compute node (computeB in this case)
+

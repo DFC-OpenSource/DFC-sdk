@@ -1,0 +1,202 @@
+Meta-OpenStack
+==============
+
+Description
+-----------
+
+The meta-openstack layers provide support for building the OpenStack
+packages.  It contains recipes for the nova, glance, keystone, cinder,
+quantum, swift and horizon components and their dependencies.
+
+The main meta-openstack layer, works in conjunction with the meta-openstack*
+layers to configure and deploy a system.
+
+Components
+----------
+
+* All the openstack packages are python packages. They can be found in the
+  recipes-devtools/python folder. Each component has been split into multiple
+  packages similar to the system used by other Linux distributions.
+
+* The configuration files for each package can be found in the files folder
+  for each package. The debug and verbose options have been enabled for
+  capturing meaningful information in the logs. The packages have been
+  configured following the model used by devstack. Each package has to
+  initialize a database before it is used for the first time. This is done
+  using a postinstall script that is run the first time the image is
+  booted. This is why the image boot time is longer the first time.
+
+* System-V initscripts are also provided in order to start the services at boot time.
+* Systemd support is not complete.
+
+* We used postgresql (package) for the database backend. The layer contains
+  an initscript that starts the DB server at boot time. Tests were done using
+  sqlite3 and MySQL and there were no errors.
+
+* The RabbitMQ server is used for the AMQP message queues. The server starts
+  at boot time with the default configuration.
+
+* The layer also contains three packagegroups:
+
+  ** packagegroup-cloud-controller - required packages for building a controller
+     node. This provides all functionality except the actual hosting of the virtual
+     machines or network services. This includes the database server, AMQP server
+     and all the openstack services except nova-compute.
+
+  ** packagegroup-cloud-compute - packages for a processing  node. This node runs
+     the compute service as well as the network service agent (in our case, the
+     Open vSwitch plugin agent). This server also manages the KVM  hypervisor.
+
+  ** packagegroup-cloud-network: this provides networking services like DHCP,
+     layer 2 switching, layer 3 routing and metadata connectivity.
+
+* When creating an image, multiple packagegroups can be used to obtain a
+  target that has the functionality of both a controller and compute node.
+
+Dependencies
+------------
+
+* This layer depends on components from the poky, meta-virtualization and
+meta-openembedded layers. You can find the exact URIs of the repos and the
+necessary revisions in the README file.
+
+Building an image
+-----------------
+
+* There are three new target images: openstack-image-compute,
+  openstack-image-network and openstack-image-controller that contain the
+  packagegroups with the same name, that have been described in the previous
+  section.
+
+* Once a buildir has been initialized you have to append the necessary layers
+to the bblayers.conf file:
+
+    /meta-virtualization \
+    /meta-cloud-services \
+    /meta-cloud-services/meta-openstack-<node type>-deploy \
+    /meta-cloud-services/meta-openstack \
+    /meta-cloud-services/meta-openstack-qemu \ # optional, add if using qemu
+    /meta-cloud-services/meta-openstack \
+    /meta-openembedded/meta-oe \
+    /meta-openembedded/meta-networking \
+    /meta-openembedded/meta-python \
+    /meta-openembedded/meta-filesystems \
+    /meta-openembedded/meta-webserver \
+    /meta-openembedded/meta-ruby
+
+Package configurations
+----------------------
+
+The identity.sh script creates the necessary users, services and endpoints
+for the Keystone identity system. If you want to customize the usernames or
+passwords don't forget to change the information in the configuration files
+for the services as well.
+
+The hosts.bbclass contains the IP addresses of the compute and controller
+nodes that will seed the system. It also contains the IP address of the
+node being built "MY_IP". Override this class in a layer to provide values
+that are specific to your configuration. The defaults are suitable for a 
+2 node system launched via runqemu.
+
+If deploying to a simulated system, add the qemu deployment layer to the
+bblayers.conf file, after the node type deployment layer.
+
+* Sample Guest Image *
+
+If a sample guest image is desired on a control node, the following can
+be added to local.conf:
+
+  IMAGE_INSTALL_append = " cirros-guest-image"
+
+* Cinder Additional Packages *
+
+On compute node, by default openstack-image-compute doesn't include
+initiator iscsi package.  If open-iscsi-user recipe exists in layers,
+the following can be added to local.conf:
+
+  CINDER_EXTRA_FEATURES += " open-iscsi-user"
+
+If glusterfs recipi exists in layers, the following can be added to
+local.conf:
+
+  CINDER_EXTRA_FEATURES += " glusterfs"
+
+Running an image
+----------------
+
+To test the images, you can run them using the runqemu script (on a machine
+with appropriate accleration). 
+
+In order to use the command line clients (nova, keystone, glance etc) some
+environmental variables have to be set. These are required by the openstack
+services to connect to the identity service and authenticate the user. These
+can be found in /root/.bashrc or /etc/nova/openrc.
+
+* Controller node *
+
+All the installed OpenStack services nova(except compute), keystone, glance,
+cinder, quantum, swift horizon should be running after a successful boot.
+
+  % bitbake openstack-image-controller
+  % runqemu qemux86-64 openstack-image-controller kvm nographic qemuparams="-m 4096"
+
+The dashboard component is listening for new connections on port 8080. You can
+connect to it using any browser.
+
+* Compute Node *
+
+All the installed OpenStack compute services nova, quantum, should be running
+after a successful boot.
+
+  % bitbake openstack-image-compute
+  % runqemu qemux86-64 openstack-image-compute kvm nographic qemuparams="-m 4096 -smp 4"
+
+* Image Launch *
+
+Assuing that the cirros-guest-image has been added to the control image, the
+following steps will validate a simple compute node guest launch:
+
+ % . /etc/nova/openrc
+ % glance image-create --name myFirstImage --is-public true \
+      --container-format bare --disk-format qcow2 --file /root/images/cirros-*-x86_64-disk.img
+ % neutron net-create mynetwork
+ % nova boot --image myFirstImage --flavor 1 myinstance
+
+* Cinder Multi-backend *
+
+Cinder currently is configured to support multi-backend: lvm-iscsi, nfs,
+glusterfs, and ceph rbd.  When a Cinder volume is created, it's needed to
+be specified which backend it belongs to through "--volume_type" option passed
+in "cinder create" command.
+
+The Cinder volume types for these backends can be created following the steps:
+
+ % . /etc/nova/openrc
+ % cinder type-create lvm_iscsi
+ % cinder type-key lvm_iscsi set volume_backend_name=LVM_iSCSI
+ % cinder type-create nfs
+ % cinder type-key nfs set volume_backend_name=Generic_NFS
+ % cinder type-create glusterfs
+ % cinder type-key glusterfs set volume_backend_name=GlusterFS
+ % cinder type-create cephrbd
+ % cinder type-key cephrbd set volume_backend_name=RBD_CEPH
+
+For example, to create 1G Cinder volume in lvm-iscsi backend:
+
+ % cinder create --volume_type lvm_iscsi --display_name=lvm_vol 1
+
+!! Hint !!
+
+ When using a multi-node setup it is recommended that each host have a different
+ hostname and that every host knows the other hosts.
+
+* Notes *
+
+Keystone token query:
+
+  % sudo -u postgres psql -d keystone -c "select count(*) from token"
+
+Ceilometer:
+
+  % ceilometer meter-list
+  % ceilometer sample-list --meter cpu

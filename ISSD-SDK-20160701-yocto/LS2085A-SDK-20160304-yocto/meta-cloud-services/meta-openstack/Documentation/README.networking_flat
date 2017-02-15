@@ -1,0 +1,249 @@
+Networking - FLAT network
+=========================
+
+Description
+-----------
+The flat network will have the VMs share the management network
+(192.168.7.0/24). The dhcp-agent will provide the VMs addresses
+within the subnet and within its provisioned range. This type of
+network will not typically be deployed as everything is accessible by
+everything else (VMs can access VMs and the compute and controller
+nodes)
+
+
+Assumptions
+-----------
+It is assumed you have completed the steps described in
+README.networking and have provisioned the host vSwitch as well as
+created the br-eth0 bridges on the controller and compute nodes.
+
+At this point you should be able to ping 192.168.7.4 from 192.168.7.4
+and vise versa.
+
+You have built your controller image including the cirros image (for
+which you have already added the image to glance as myFirstImage).
+
+You have run 'source /etc/nova/openrc'
+
+Configuration updates
+---------------------
+On the controller and (all) compute nodes you must edit the file
+/etc/neutron/plugins/openvswitch/ovs_neutron_plugin.ini
+
+In the [OVS] section set
+network_vlan_ranges = ph-eth0:1:1
+bridge_mappings = ph-eth0:br-eth0
+
+(*** on compute nodes edit local_ip as well [192.168.7.4]***)
+
+Restart some services to allow these changes to take effect:
+/etc/init.d/neutron-openvswitch-agent reload
+(on controller)
+/etc/init.d/neutron-server reload
+/etc/init.d/neutron-dhcp-agent reload
+(on compute)
+/etc/init.d/nova-compute reload
+
+
+Create the net and subnet
+-------------------------
+neutron net-create --provider:physical_network=ph-eth0 \
+  --provider:network_type=flat \
+  --shared MY_FLAT_NET
+Created a new network:
++---------------------------+--------------------------------------+
+| Field                     | Value                                |
++---------------------------+--------------------------------------+
+| admin_state_up            | True                                 |
+| id                        | 3263aa7f-b86c-4ad3-a28c-c78d4c711583 |
+| name                      | MY_FLAT_NET                          |
+| provider:network_type     | flat                                 |
+| provider:physical_network | ph-eth0                              |
+| provider:segmentation_id  |                                      |
+| shared                    | True                                 |
+| status                    | ACTIVE                               |
+| subnets                   |                                      |
+| tenant_id                 | b5890ba3fb234347ae317ca2f8358663     |
++---------------------------+--------------------------------------+
+
+
+neutron subnet-create MY_FLAT_NET 192.168.7.0/24 --name MY_FLAT_SUBNET \
+  --no-gateway --host-route destination=0.0.0.0/0,nexthop=192.168.7.1 \
+  --allocation-pool start=192.168.7.230,end=192.168.7.234
+Created a new subnet:
++------------------+--------------------------------------------------------+
+| Field            | Value                                                  |
++------------------+--------------------------------------------------------+
+| allocation_pools | {"start": "192.168.7.230", "end": "192.168.7.234"}     |
+| cidr             | 192.168.7.0/24                                         |
+| dns_nameservers  |                                                        |
+| enable_dhcp      | True                                                   |
+| gateway_ip       |                                                        |
+| host_routes      | {"destination": "0.0.0.0/0", "nexthop": "192.168.7.1"} |
+| id               | bfa99d99-2ba5-47e9-b71e-0bd8a2961e08                   |
+| ip_version       | 4                                                      |
+| name             | MY_FLAT_SUBNET                                         |
+| network_id       | 3263aa7f-b86c-4ad3-a28c-c78d4c711583                   |
+| tenant_id        | b5890ba3fb234347ae317ca2f8358663                       |
++------------------+--------------------------------------------------------+
+
+Boot the image and test connectivity
+------------------------------------
+nova boot --image myFirstImage --flavor m1.small \
+  --nic net-id=3263aa7f-b86c-4ad3-a28c-c78d4c711583 myinstance
++--------------------------------------+-----------------------------------------------------+
+| Property                             | Value                                               |
++--------------------------------------+-----------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                              |
+| OS-EXT-AZ:availability_zone          | nova                                                |
+| OS-EXT-SRV-ATTR:host                 | -                                                   |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | -                                                   |
+| OS-EXT-SRV-ATTR:instance_name        | instance-00000003                                   |
+| OS-EXT-STS:power_state               | 0                                                   |
+| OS-EXT-STS:task_state                | scheduling                                          |
+| OS-EXT-STS:vm_state                  | building                                            |
+| OS-SRV-USG:launched_at               | -                                                   |
+| OS-SRV-USG:terminated_at             | -                                                   |
+| accessIPv4                           |                                                     |
+| accessIPv6                           |                                                     |
+| adminPass                            | 7Qe9nFekCjYD                                        |
+| config_drive                         |                                                     |
+| created                              | 2014-04-10T04:13:38Z                                |
+| flavor                               | m1.small (2)                                        |
+| hostId                               |                                                     |
+| id                                   | f85da1da-c318-49fb-8da9-c07644400d4c                |
+| image                                | myFirstImage (1da089b1-164d-45d6-9b6c-002f3edb8a7b) |
+| key_name                             | -                                                   |
+| metadata                             | {}                                                  |
+| name                                 | myinstance                                          |
+| os-extended-volumes:volumes_attached | []                                                  |
+| progress                             | 0                                                   |
+| security_groups                      | default                                             |
+| status                               | BUILD                                               |
+| tenant_id                            | b5890ba3fb234347ae317ca2f8358663                    |
+| updated                              | 2014-04-10T04:13:38Z                                |
+| user_id                              | 1dfcb72ef6a7428d8dd7300bc7f303d9                    |
++--------------------------------------+-----------------------------------------------------+
+
+nova list
++--------------------------------------+------------+--------+------------+-------------+---------------------------+
+| ID                                   | Name       | Status | Task State | Power State | Networks                  |
++--------------------------------------+------------+--------+------------+-------------+---------------------------+
+| f85da1da-c318-49fb-8da9-c07644400d4c | myinstance | ACTIVE | -          | Running     | MY_FLAT_NET=192.168.7.231 |
++--------------------------------------+------------+--------+------------+-------------+---------------------------+
+
+nova console-log myinstance
+---
+...skip
+Starting logging: OK
+Initializing random number generator... done.
+Starting network...
+udhcpc (v1.18.5) started
+Sending discover...
+Sending select for 192.168.7.231...
+Lease of 192.168.7.231 obtained, lease time 86400
+deleting routers
+...skip
+
+ping
+---
+root@controller:~# ping -c 1 192.168.7.231
+PING 192.168.7.231 (192.168.7.231) 56(84) bytes of data.
+64 bytes from 192.168.7.231: icmp_seq=1 ttl=64 time=2.98 ms
+
+--- 192.168.7.231 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 2.988/2.988/2.988/0.000 ms
+
+You should also be able to ping the compute or controller or other VMs
+(if you start them) from within a VM. Pinging targets outside the
+subnet requires that you ensure the various interfaces, such as eth0
+have promisc on 'ip link set eth0 promisc on'
+
+The final Open vSwitch configs
+------------------------------
+
+Controller
+---
+root@controller:~# ovs-vsctl show
+524a6c84-226d-427b-8efa-732ed7e7fa43
+    Bridge "br-eth0"
+        Port "eth0"
+            Interface "eth0"
+        Port "br-eth0"
+            Interface "br-eth0"
+                type: internal
+        Port "phy-br-eth0"
+            Interface "phy-br-eth0"
+    Bridge br-int
+        Port "tap549fb0c7-1a"
+            tag: 1
+            Interface "tap549fb0c7-1a"
+                type: internal
+        Port "int-br-eth0"
+            Interface "int-br-eth0"
+        Port patch-tun
+            Interface patch-tun
+                type: patch
+                options: {peer=patch-int}
+        Port br-int
+            Interface br-int
+                type: internal
+    Bridge br-tun
+        Port "gre-2"
+            Interface "gre-2"
+                type: gre
+                options: {in_key=flow, local_ip="192.168.7.2", out_key=flow, remote_ip="192.168.7.4"}
+        Port br-tun
+            Interface br-tun
+                type: internal
+        Port patch-int
+            Interface patch-int
+                type: patch
+                options: {peer=patch-tun}
+    ovs_version: "2.0.0"
+
+
+Compute
+---
+root@compute:~# ovs-vsctl show
+99d365d2-f74e-40a8-b9a0-5bb60353675d
+    Bridge br-tun
+        Port "gre-1"
+            Interface "gre-1"
+                type: gre
+                options: {in_key=flow, local_ip="192.168.7.4", out_key=flow, remote_ip="192.168.7.2"}
+        Port br-tun
+            Interface br-tun
+                type: internal
+        Port patch-int
+            Interface patch-int
+                type: patch
+                options: {peer=patch-tun}
+    Bridge br-int
+        Port br-int
+            Interface br-int
+                type: internal
+        Port "int-br-eth0"
+            Interface "int-br-eth0"
+        Port patch-tun
+            Interface patch-tun
+                type: patch
+                options: {peer=patch-int}
+        Port "tap93a74250-ef"
+            tag: 1
+            Interface "tap93a74250-ef"
+    Bridge "br-eth0"
+        Port "phy-br-eth0"
+            Interface "phy-br-eth0"
+        Port "eth0"
+            Interface "eth0"
+        Port "br-eth0"
+            Interface "br-eth0"
+                type: internal
+    ovs_version: "2.0.0"
+
+
+References
+----------
+http://developer.rackspace.com/blog/neutron-networking-simple-flat-network.html

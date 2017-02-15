@@ -1,0 +1,49 @@
+#!/bin/sh
+# set -x
+
+PN=postgresql
+CONTROLLER_IP=%CONTROLLER_IP%
+COMPUTE_IP=%COMPUTE_IP%
+DB_USER=%DB_USER%
+DB_PASSWORD=%DB_PASSWORD%
+DATA_DIR=%DB_DATADIR%
+
+if [ ! -e $DATA_DIR ]; then
+	mkdir -p $DATA_DIR
+	chown postgres $DATA_DIR
+fi
+
+if [ -e $DATA_DIR/PG_VERSION ]; then
+    # the database has already been initialized, return
+    exit 0
+fi
+
+sudo -u postgres initdb -D $DATA_DIR
+echo "listen_addresses = '*'" >> $DATA_DIR/postgresql.conf
+echo "host   all   all   ${CONTROLLER_IP}/32   trust" >> $DATA_DIR/pg_hba.conf
+echo "host   all   all   ${COMPUTE_IP}/32   trust" >> $DATA_DIR/pg_hba.conf
+/etc/init.d/postgresql start
+
+count=0
+done=0
+while [ $count -le 10 ] && [ $done -eq 0 ]; do
+    sudo -u postgres psql -c "CREATE ROLE ${DB_USER} WITH SUPERUSER LOGIN PASSWORD '${DB_PASSWORD}'" 2> /dev/null
+    if [ $? -ne 0 ]; then
+        echo "[INFO] postgres: failed to create account for ${DB_USER}, trying again"
+        /etc/init.d/postgresql stop
+	sleep 3
+        /etc/init.d/postgresql start
+	sleep 3
+    else
+        echo "[INFO] postgres: created account for ${DB_USER}, continuing .. "
+        done=1
+    fi
+    count=`expr $count + 1`
+done
+    
+if [ $done -eq 0 ]; then
+    echo "[ERROR] postgres: unable to create admin account"
+    exit 1
+fi
+
+ln -s /usr/share/zoneinfo /usr/share/postgresql/timezone || true

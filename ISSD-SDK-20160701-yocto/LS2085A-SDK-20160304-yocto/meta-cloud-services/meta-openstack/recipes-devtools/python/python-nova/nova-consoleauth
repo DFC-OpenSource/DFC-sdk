@@ -1,0 +1,110 @@
+#! /bin/sh
+### BEGIN INIT INFO
+# Provides:          nova-consoleauth
+# Required-Start:    $remote_fs $syslog
+# Required-Stop:     $remote_fs $syslog
+# Should-Start:      libvirt-bin
+# Should-Stop:       libvirt-bin
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: nova-consoleauth service
+# Description:       Provides console services for the openstack
+#                    cloud computing system
+### END INIT INFO
+
+
+set -e
+
+DAEMON=/usr/bin/nova-consoleauth
+DAEMON_ARGS="--log-dir=/var/log/nova "                                              
+PIDFILE=/var/run/nova/nova-consoleauth.pid
+
+ENABLED=true
+
+if test -f /etc/default/nova-consoleauth; then
+  . /etc/default/nova-consoleauth
+fi
+
+mkdir -p /var/run/nova
+chown nova:root /var/run/nova/
+
+mkdir -p /var/lock/nova
+chown nova:root /var/lock/nova/
+
+#uid="$(getent passwd nova | cut -f3 -d:)"
+#gid="$(getent passwd nova | cut -f4 -d:)"
+
+. /lib/lsb/init-functions
+
+export PATH="${PATH:+$PATH:}/usr/sbin:/sbin"
+export TMPDIR=/var/lib/nova/tmp
+
+if ! [ -x ${DAEMON} ] ; then
+	exit 0
+fi
+
+DESC="nova console"
+status()
+{
+    pid=`cat $PIDFILE 2>/dev/null`
+    if [ -n "$pid" ]; then
+        if ps -p $pid > /dev/null 2>&1 ; then
+            echo "$DESC is running"
+            return
+        fi
+    fi
+    echo "$DESC is not running"
+}
+
+case "$1" in
+  start)
+    test "$ENABLED" = "true" || exit 0
+
+    if [ -e $PIDFILE ]; then
+        PIDDIR=/proc/$(cat $PIDFILE)
+        if [ -d ${PIDDIR} ]; then
+            echo "$DESC already running."
+            exit 1
+        else
+            echo "Removing stale PID file $PIDFILE"
+            rm -f $PIDFILE
+        fi
+    fi
+    PIDDIR=`dirname $PIDFILE`
+    if [ ! -d $PIDDIR ]; then
+        mkdir -p $PIDDIR
+        chown nova $PIDDIR
+    fi
+
+    if [ ! -d /var/log/nova ]; then
+        mkdir /var/log/nova
+    fi
+
+    echo "Starting nova console" "nova-consoleauth"
+    start-stop-daemon --start -b -m --pidfile $PIDFILE \
+        --exec ${DAEMON} -- ${DAEMON_ARGS}
+    log_end_msg $?
+    ;;
+  stop)
+    test "$ENABLED" = "true" || exit 0
+    echo "Stopping nova console" "nova-consoleauth"
+    start-stop-daemon --stop --oknodo --pidfile ${PIDFILE}
+    log_end_msg $?
+    ;;
+  restart|force-reload|reload)
+    test "$ENABLED" = "true" || exit 1
+    $0 stop
+    sleep 1
+    $0 start
+    ;;
+  status)
+    test "$ENABLED" = "true" || exit 0
+    status
+    ;;
+  *)
+    echo "Usage: /etc/init.d/nova-consoleauth {start|stop|restart|force-reload|status|reload}"
+    exit 1
+    ;;
+esac
+
+exit 0

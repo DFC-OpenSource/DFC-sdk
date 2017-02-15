@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% load projecttags %}
+{% load humanize %}
+{% block pagecontent %}
+
+
+ <div class="row-fluid">
+<!-- Breadcrumbs -->
+    <div class="section">
+        <ul class="breadcrumb" id="breadcrumb">
+            <li><a href="{% url 'all-builds' %}">All builds</a></li>
+            {% block parentbreadcrumb %}
+        {% if project %}
+          {% if project_html %}
+            <li>
+                {{project.name}}
+            </li>
+          {% else %}
+            <li>
+                <a href="{%url 'project' project.id %}"><span id="project_name">{{project.name}}</span>
+                </a>
+            </li>
+          {% endif %}
+        {% endif %}
+            {% endblock %}
+            {% block localbreadcrumb %}{% endblock %}
+        </ul>
+        <script>
+        $( function () {
+            $('#breadcrumb > li').append("<span class=\"divider\">→</span>");
+            $('#breadcrumb > li:last').addClass("active");
+            $('#breadcrumb > li:last > span').remove();
+        });
+        </script>
+    </div>
+
+    <!-- Begin main page container -->
+    {% block projectinfomain %}{% endblock %}
+    <!-- End main container -->
+
+  </div>
+
+
+{% endblock %}
+

@@ -1,0 +1,30 @@
+From 929b981a5970082980dcda7ad531ab7f2fb71577 Mon Sep 17 00:00:00 2001
+From: Bruce Ashfield <bruce.ashfield@windriver.com>
+Date: Wed, 30 Apr 2014 23:54:30 -0400
+Subject: [PATCH] glance/store: only load known stores, not all stores
+
+To avoid the import of modules and support for unnecessary storage options,
+we only load the store modules that are specified as known_stores in the
+glance-api.conf.
+
+Signed-off-by: Bruce Ashfield <bruce.ashfield@windriver.com>
+---
+ glance/store/__init__.py |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/glance/store/__init__.py b/glance/store/__init__.py
+index 33a67d626d37..0fdedcfe3c86 100644
+--- a/glance/store/__init__.py
++++ b/glance/store/__init__.py
+@@ -181,7 +181,7 @@ def create_stores():
+     """
+     store_count = 0
+     store_classes = set()
+-    for store_entry in set(CONF.known_stores + _ALL_STORES):
++    for store_entry in set(CONF.known_stores):
+         store_entry = store_entry.strip()
+         if not store_entry:
+             continue
+-- 
+1.7.10.4
+

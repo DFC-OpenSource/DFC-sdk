@@ -1,0 +1,70 @@
+From 38da2cc5292b3287dd12727faa4bfaedd31e170d Mon Sep 17 00:00:00 2001
+From: Mark Asselstine <mark.asselstine@windriver.com>
+Date: Thu, 1 May 2014 09:04:36 -0400
+Subject: [PATCH] build: fix builds that have separated build dir
+
+Setting up the link to the Makefile.in fails since it assumes
+the build is happening in the src directory. As well the Makefile.in
+doesn't make use of VPATH to allow for builds out of the src dir.
+
+Signed-off-by: Mark Asselstine <mark.asselstine@windriver.com>
+---
+ configure.ac     |  6 +++++-
+ posix-ap2X.mk.in | 10 ++++++----
+ 2 files changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index eecaee2..40b263d 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -209,6 +209,10 @@ AC_SUBST(LIBEXECDIR)
+ HTTPD_MAJOR_VERSION=`echo ${HTTPD_VERSION} | sed -e 's/\..*//'`
+ 
+ rm -f Makefile.in
+-ln -s posix-ap${HTTPD_MAJOR_VERSION}X.mk.in Makefile.in
++ln -s ${srcdir}/posix-ap${HTTPD_MAJOR_VERSION}X.mk.in Makefile.in
++
++dnl apxs creates artifacts where the .c file lives, so to get build separation we need to use a link
++rm -f mod_wsgi.c
++ln -s ${srcdir}/mod_wsgi.c mod_wsgi.c
+ 
+ AC_OUTPUT(Makefile)
+diff --git a/posix-ap2X.mk.in b/posix-ap2X.mk.in
+index 195cdea..de28f8a 100644
+--- a/posix-ap2X.mk.in
++++ b/posix-ap2X.mk.in
+@@ -15,6 +15,8 @@
+ APXS = @APXS@
+ PYTHON = @PYTHON@
+ 
++VPATH = @srcdir@
++
+ DESTDIR =
+ LIBEXECDIR = @LIBEXECDIR@
+ 
+@@ -26,7 +28,7 @@ LDLIBS = @LDLIBS@
+ all : mod_wsgi.la
+ 
+ mod_wsgi.la : mod_wsgi.c
+-	$(APXS) -c $(CPPFLAGS) $(CFLAGS) mod_wsgi.c $(LDFLAGS) $(LDLIBS)
++	$(APXS) -c $(CPPFLAGS) $(CFLAGS) $< $(LDFLAGS) $(LDLIBS) -o $@
+ 
+ $(DESTDIR)$(LIBEXECDIR) :
+ 	mkdir -p $@
+@@ -38,10 +40,10 @@ clean :
+ 	-rm -rf .libs
+ 	-rm -f mod_wsgi.o mod_wsgi.la mod_wsgi.lo mod_wsgi.slo mod_wsgi.loT
+ 	-rm -f config.log config.status
+-	-rm -rf autom4te.cache
++	-rm -rf @srcdir@/autom4te.cache
+ 
+ distclean : clean
+-	-rm -f Makefile Makefile.in
++	-rm -f Makefile Makefile.in mod_wsgi.c
+ 
+ realclean : distclean
+-	-rm -f configure
++	-rm -f @srcdir@/configure @srcdir@/config.guess @srcdir@/config.sub
+-- 
+1.8.3.2
+

@@ -1,0 +1,39 @@
+From 89aa2a575687013f4b4f4d4353c50af1de4c26ba Mon Sep 17 00:00:00 2001
+From: Keith Holman <Keith.Holman@windriver.com>
+Date: Fri, 30 May 2014 11:58:33 -0400
+Subject: [PATCH] horizon: use full package path to test directories
+
+The tests included Horizon expect all files to be in a single
+location in order to be run directly from the source tree. The
+recipe for installing Horizon on the system installs Horizon
+as a python site-package and puts files in different locations
+depending on the file type.  In order to have the tests support
+this type of install we need to explicitly indicate the full path
+of the test files to exclude in order to have the tests run
+successfully.  This fix adds an identifier that will be replaced
+within the build recipe with the full path to the python site
+packages.
+
+Signed-off-by: Keith Holman <Keith.Holman@windriver.com>
+---
+ horizon/test/settings.py | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/horizon/test/settings.py b/horizon/test/settings.py
+index f5ea700..10318eb 100644
+--- a/horizon/test/settings.py
++++ b/horizon/test/settings.py
+@@ -95,8 +95,8 @@ SITE_BRANDING = 'Horizon'
+ TEST_RUNNER = 'django_nose.NoseTestSuiteRunner'
+ NOSE_ARGS = ['--nocapture',
+              '--nologcapture',
+-             '--exclude-dir=horizon/conf/',
+-             '--exclude-dir=horizon/test/customization',
++             '--exclude-dir=%PYTHON_SITEPACKAGES%/horizon/conf/',
++             '--exclude-dir=%PYTHON_SITEPACKAGES%/horizon/test/customization',
+              '--cover-package=horizon',
+              '--cover-inclusive',
+              '--all-modules']
+-- 
+1.9.3
+

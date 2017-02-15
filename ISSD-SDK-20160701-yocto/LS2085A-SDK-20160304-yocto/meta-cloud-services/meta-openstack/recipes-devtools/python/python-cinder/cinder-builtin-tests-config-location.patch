@@ -1,0 +1,24 @@
+cinder builtin tests config location
+
+Many cinder built-in testcases failed because they
+can not find cinder configuration file, as these
+testcases assume that they are run at python
+site-packages dir.  So forcing these failure
+testcases to look for these confiugration file
+using absolute path.
+
+Signed-off-by: Vu Tran <vu.tran@windriver.com>
+
+Index: git/cinder/tests/conf_fixture.py
+===================================================================
+--- git.orig/cinder/tests/conf_fixture.py
++++ git/cinder/tests/conf_fixture.py
+@@ -43,7 +43,7 @@
+     conf.set_default('iscsi_num_targets', 8)
+     conf.set_default('connection', 'sqlite://', group='database')
+     conf.set_default('sqlite_synchronous', False, group='database')
+-    conf.set_default('policy_file', 'cinder/tests/policy.json')
++    conf.set_default('policy_file', '%PYTHON_SITEPACKAGES_DIR%/cinder/tests/policy.json')
+     conf.set_default(
+         'xiv_ds8k_proxy',
+         'cinder.tests.test_ibm_xiv_ds8k.XIVDS8KFakeProxyDriver')

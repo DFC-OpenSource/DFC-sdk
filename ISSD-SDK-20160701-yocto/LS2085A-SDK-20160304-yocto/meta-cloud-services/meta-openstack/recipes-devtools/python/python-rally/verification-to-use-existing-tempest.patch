@@ -1,0 +1,122 @@
+verification: to use existing tempest
+
+By default, Rally verification requires to do
+following things:
+
+* git clone tempest source from upstream
+* setup virtualenv for this tempest
+* setup testr environement with virtualenv above
+* create tempest.conf for this tempest
+
+If tempest is already installed/configured in rootfs
+then force Rally to use this existing tempest.
+
+If the option "existing_tempest_config" in /etc/rally/rally.conf
+is not set then follows the default path.  If existing_tempest_config
+is set to absolute path of tempest config folder (which
+contains tempest "tools" amd .testr.conf) then Rally
+uses this existing tempest.
+
+Signed-off-by: Vu Tran <vu.tran@windriver.com>
+
+diff --git a/rally/orchestrator/api.py b/rally/orchestrator/api.py
+index d0cc769..644c16b 100644
+--- a/rally/orchestrator/api.py
++++ b/rally/orchestrator/api.py
+@@ -143,8 +143,11 @@ def verify(deploy_id, set_name, regex):
+     verification = objects.Verification(deployment_uuid=deploy_id)
+     verifier = tempest.Tempest(deploy_id, verification=verification)
+     if not verifier.is_installed():
+-        print("Tempest is not installed for specified deployment.")
+-        print("Installing Tempest for deployment %s" % deploy_id)
++        if tempest.CONF.existing_tempest_config is None:
++            print("Tempest is not installed for specified deployment.")
++            print("Installing Tempest for deployment %s" % deploy_id)
++        else:
++            print("Configuring existing Tempest for deployment %s" % deploy_id)
+         verifier.install()
+     LOG.info("Starting verification of deployment: %s" % deploy_id)
+ 
+diff --git a/rally/verification/verifiers/tempest/tempest.py b/rally/verification/verifiers/tempest/tempest.py
+index 13a829d..428af49 100644
+--- a/rally/verification/verifiers/tempest/tempest.py
++++ b/rally/verification/verifiers/tempest/tempest.py
+@@ -25,9 +25,17 @@ from rally.openstack.common import jsonutils
+ from rally import utils
+ from rally.verification.verifiers.tempest import config
+ from rally.verification.verifiers.tempest import subunit2json
++from oslo.config import cfg
+ 
+ LOG = logging.getLogger(__name__)
+ 
++CONF = cfg.CONF
++CONF.register_opts([
++    cfg.StrOpt("existing_tempest_config", default=None,
++               help="Path to existing tempest config folder, this path "
++                    "should contain \"tools\" folder and .testr.conf file")
++])
++
+ 
+ class Tempest(object):
+ 
+@@ -41,8 +49,11 @@ class Tempest(object):
+                                          "for-deployment-%s" % deploy_id)
+         self.config_file = os.path.join(self.tempest_path, "tempest.conf")
+         self.log_file_raw = os.path.join(self.tempest_path, "subunit.stream")
+-        self.venv_wrapper = os.path.join(self.tempest_path,
++        if CONF.existing_tempest_config is None:
++            self.venv_wrapper = os.path.join(self.tempest_path,
+                                          "tools/with_venv.sh")
++        else:
++            self.venv_wrapper = ""
+         self.verification = verification
+         self._env = None
+ 
+@@ -62,6 +73,9 @@ class Tempest(object):
+         return self._env
+ 
+     def _install_venv(self):
++        if CONF.existing_tempest_config is not None:
++            open(os.path.join(self.tempest_path, '.venv'), 'w').close()
++            return
+         if not os.path.isdir(os.path.join(self.tempest_path, '.venv')):
+             LOG.info("No virtual environment found...Install the virtualenv.")
+             LOG.debug("Virtual environment directory: %s" %
+@@ -111,10 +125,13 @@ class Tempest(object):
+     def install(self):
+         if not self.is_installed():
+             try:
+-                if not os.path.exists(Tempest.tempest_base_path):
++                if CONF.existing_tempest_config is None and \
++				        not os.path.exists(Tempest.tempest_base_path):
+                     Tempest._clone()
+-
+-                if not os.path.exists(self.tempest_path):
++                if CONF.existing_tempest_config is not None:
++                    shutil.copytree(CONF.existing_tempest_config,
++                                    self.tempest_path)
++                elif not os.path.exists(self.tempest_path):
+                     shutil.copytree(Tempest.tempest_base_path,
+                                     self.tempest_path)
+                     subprocess.check_call("git checkout master; "
+@@ -128,7 +145,10 @@ class Tempest(object):
+                 self.uninstall()
+                 raise exceptions.TempestSetupFailure("failed cmd: '%s'", e.cmd)
+             else:
+-                print("Tempest has been successfully installed!")
++                if CONF.existing_tempest_config is None:
++                    print("Tempest has been successfully installed!")
++                else:
++                    print("Verifier has been successfully configured to use existing Tempest")
+ 
+         else:
+             print("Tempest is already installed")
+@@ -139,7 +159,7 @@ class Tempest(object):
+ 
+     @utils.log_verification_wrapper(LOG.info, _("Run verification."))
+     def _prepare_and_run(self, set_name, regex):
+-        if not self.is_configured():
++        if CONF.existing_tempest_config is None and not self.is_configured():
+             self.generate_config_file()
+ 
+         if set_name == "full":

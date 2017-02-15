@@ -1,0 +1,49 @@
+From 34be0d3cd8c4eaca9929470bc8bce5e74975bccf Mon Sep 17 00:00:00 2001
+From: Bogdan Purcareata <bogdan.purcareata@freescale.com>
+Date: Thu, 23 Apr 2015 08:33:00 +0000
+Subject: [PATCH] lxc-busybox: make some OpenSSH tools optional
+
+Currently, when installing OpenSSH in a Busybox container, the template searches
+for all the OpenSSH client binaries available in the Debian distro package. The
+included tools might differ from distro to distro, so make part of the tools
+optional. The mandatory tools, without which installing OpenSSH fails, are
+"sshd" for the server and "ssh" and "scp" for the client.
+
+Upstream-Status: Submitted
+[https://lists.linuxcontainers.org/pipermail/lxc-devel/2015-April/011696.html]
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@freescale.com>
+---
+ templates/lxc-busybox.in | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/templates/lxc-busybox.in b/templates/lxc-busybox.in
+index 95961a3..17a3006 100644
+--- a/templates/lxc-busybox.in
++++ b/templates/lxc-busybox.in
+@@ -197,6 +197,8 @@ install_openssh()
+     client_utils="\
+         ssh \
+         scp \
++        "
++    client_optional_utils="\
+         sftp \
+         ssh-add \
+         ssh-agent \
+@@ -230,6 +232,13 @@ $rootfs/var/run/sshd \
+         fi
+     done
+ 
++    for bin in $client_optional_utils; do
++        tool_path=`which $bin`
++        if [ $? -eq 0 ]; then
++            cp $tool_path $rootfs/$tool_path
++        fi
++    done
++
+     # add user and group
+     cat <<EOF >> $rootfs/etc/passwd
+ sshd:x:74:74:Privilege-separated SSH:/var/empty/sshd:/sbin/nologin
+-- 
+2.1.4
+

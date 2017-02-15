@@ -1,0 +1,28 @@
+dn: dc=my-domain,dc=com
+objectclass: dcObject
+objectclass: top
+objectclass: organization
+o: my-domain Company
+dc: my-domain
+
+dn: cn=Manager,dc=my-domain,dc=com
+objectclass: organizationalRole
+cn: Manager
+description: LDAP administratior
+roleOccupant: dc=my-domain,dc=com
+
+dn: ou=Roles,dc=my-domain,dc=com
+objectclass:organizationalunit
+ou: Roles
+description: generic groups branch
+
+dn: ou=Users,dc=my-domain,dc=com
+objectclass:organizationalunit
+ou: Users
+description: generic groups branch
+
+dn: ou=Groups,dc=my-domain,dc=com
+objectclass:organizationalunit
+ou: Groups
+description: generic groups branch
+

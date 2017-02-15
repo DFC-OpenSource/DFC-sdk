@@ -1,0 +1,57 @@
+From 598187ec16f424b7548e8f049436c0c9c43d7795 Mon Sep 17 00:00:00 2001
+From: Andrew Pinski <apinski@cavium.com>
+Date: Mon, 27 Oct 2014 00:59:42 -0700
+Subject: [PATCH 19/32] Reformat inline-asm in elf_machine_load_address.
+
+This patch reformats the inline-asm in elf_machine_load_address so it is
+easier to change only part of the inline-asm.  That is using string
+concating instead of string continueing.
+
+Also document on why this inline-asm works, it depends on the 32bit
+relocation being resolved at link time.
+
+* sysdeps/aarch64/dl-machine.h (elf_machine_load_address):
+Refactor inline-asm.  Also add comment.
+---
+ sysdeps/aarch64/dl-machine.h | 21 ++++++++++++---------
+ 1 file changed, 12 insertions(+), 9 deletions(-)
+
+diff --git a/sysdeps/aarch64/dl-machine.h b/sysdeps/aarch64/dl-machine.h
+index 6e041b1..121b178 100644
+--- a/sysdeps/aarch64/dl-machine.h
++++ b/sysdeps/aarch64/dl-machine.h
+@@ -53,19 +53,22 @@ elf_machine_load_address (void)
+      The choice of symbol is arbitrary. The static address we obtain
+      by constructing a non GOT reference to the symbol, the dynamic
+      address of the symbol we compute using adrp/add to compute the
+-     symbol's address relative to the PC. */
++     symbol's address relative to the PC.
++     This depends on 32bit relocations being resolved at link time
++     and that the static address fits in the 32bits.  */
+ 
+   ElfW(Addr) static_addr;
+   ElfW(Addr) dynamic_addr;
+ 
+-  asm ("					\n\
+-	adrp	%1, _dl_start;			\n\
+-        add	%1, %1, #:lo12:_dl_start        \n\
+-        ldr	%w0, 1f				\n\
+-	b	2f				\n\
+-1:	.word	_dl_start			\n\
+-2:						\n\
+-       " : "=r" (static_addr),  "=r" (dynamic_addr));
++  asm ("					\n"
++"	adrp	%1, _dl_start;			\n"
++"       add	%1, %1, #:lo12:_dl_start        \n"
++"       ldr	%w0, 1f				\n"
++"	b	2f				\n"
++"1:						\n"
++"	.word	_dl_start			\n"
++"2:						\n"
++    : "=r" (static_addr),  "=r" (dynamic_addr));
+   return dynamic_addr - static_addr;
+ }
+ 
+-- 
+1.9.3
+

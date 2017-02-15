@@ -1,0 +1,38 @@
+From a774e70e50f898c7380f6cfb368d55a99ed71956 Mon Sep 17 00:00:00 2001
+From: Andrew Pinski <apinski@cavium.com>
+Date: Wed, 3 Sep 2014 14:18:55 -0700
+Subject: [PATCH 01/25] ARM64: Force LP64 to compile the kernel
+
+Sometimes the compiler is set to default to ILP32 ABI so we want to make sure the kernel can compile in that case.
+
+Signed-off-by: Andrew Pinski <apinski@cavium.com>
+---
+ arch/arm64/Makefile | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm64/Makefile b/arch/arm64/Makefile
+index 20901ff..f3ef4a3 100644
+--- a/arch/arm64/Makefile
++++ b/arch/arm64/Makefile
+@@ -20,14 +20,18 @@ LIBGCC 		:= $(shell $(CC) $(KBUILD_CFLAGS) -print-libgcc-file-name)
+ KBUILD_DEFCONFIG := defconfig
+ 
+ KBUILD_CFLAGS	+= -mgeneral-regs-only
++KBUILD_CFLAGS	+= $(call cc-option,-mabi=lp64)
++KBUILD_AFLAGS	+= $(call cc-option,-mabi=lp64)
+ ifeq ($(CONFIG_CPU_BIG_ENDIAN), y)
+ KBUILD_CPPFLAGS	+= -mbig-endian
+ AS		+= -EB
+ LD		+= -EB
++LDFLAGS		+= -maarch64linuxb
+ else
+ KBUILD_CPPFLAGS	+= -mlittle-endian
+ AS		+= -EL
+ LD		+= -EL
++LDFLAGS		+= -maarch64linux
+ endif
+ 
+ CHECKFLAGS	+= -D__aarch64__
+-- 
+1.9.3
+

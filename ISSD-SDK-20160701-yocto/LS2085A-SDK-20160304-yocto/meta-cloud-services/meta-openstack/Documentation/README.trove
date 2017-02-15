@@ -1,0 +1,76 @@
+Summary
+=======
+
+This document is not intended to provide deail of how Trove in general works,
+but rather it highlights the deails of how Trove is set up and how OpenStack is
+configured to allow the Troveclient to interact with Trove.
+
+Trove Overview
+==============
+
+Trove is Database as a Service for OpenStack. It's designed to run entirely on
+OpenStack, with the goal of allowing users to quickly and easily utilize the
+features of a relational database without the burden of handling complex
+administrative tasks. Cloud users and database administrators can provision and
+manage multiple database instances as needed. Initially, the service will focus
+on providing resource isolation at high performance while automating complex
+administrative tasks including deployment, configuration, patching, backups,
+restores, and monitoring.
+
+Trove Setup
+===========
+
+Trove is set up to have the following:
+
+* The database and datastore are added as postgresql since this is the default
+  database configuration.
+
+* There is a keystone user and service created for Trove called "trove".  The
+  role is admin.
+
+Interactions with Trove are handled through the troveclient on the command line.
+The troveclient binary is simply called trove.  For details of how to use trove
+on the command line, please refer to the help:
+
+        $ trove
+
+Build Configuration Options
+===========================
+
+Trove and Troveclient are both in the package group of the controller.  The
+troveclient is in the package group of the compute node.  To add the unit tests
+to either image, add the following layer to your configuration:
+--with-template=feature/openstack-tests
+
+
+Test Steps
+==========
+
+This section describes test steps and expected results to demonstrate that
+Trove is integrated properly into OpenStack.
+
+Both components use the run_ostest_nose.sh script which needs to be manually
+copied to the target.
+
+
+Trove and Troveclient Unit Tests
+===============================
+
+On the controller:
+sh run_ostest_nose.sh -t /usr/lib64/python2.7/site-packages/trove
+
+Total: 741, Passed: 740
+
+
+On either the controller or compute node:
+sh run_ostest_nose.sh -t /usr/lib64/python2.7/site-packages/troveclient
+
+Total: 202, Passed: 202
+
+References
+==========
+
+ * https://github.com/openstack/python-troveclient
+ * https://github.com/openstack/trove
+ * https://wiki.openstack.org/wiki/TrovArchitecture
+ * https://wiki.openstack.org/wiki/Trove

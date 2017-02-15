@@ -1,0 +1,40 @@
+Description: pass CFLAGS to contrib builds
+ $(CFLAGS) is missing from the compiler invocations for autogroup and
+ smbk5pwd, which means they're not being hardened.
+Author: Simon Ruderich <simon@ruderich.org>
+Bug-Debian: http://bugs.debian.org/663724
+
+--- a/contrib/slapd-modules/autogroup/Makefile
++++ b/contrib/slapd-modules/autogroup/Makefile
+@@ -27,12 +27,12 @@ moduledir = $(libexecdir)$(ldap_subdir)
+ .SUFFIXES: .c .o .lo
+ 
+ .c.lo:
+-	$(LIBTOOL) --mode=compile $(CC) $(OPT) $(DEFS) $(INCS) -c $<
++	$(LIBTOOL) --mode=compile $(CC) $(OPT) $(CFLAGS) $(DEFS) $(INCS) -c $<
+ 
+ all: $(PROGRAMS)
+ 
+ autogroup.la: autogroup.lo
+-	$(LIBTOOL) --mode=link $(CC) $(OPT) -version-info $(LTVER) \
++	$(LIBTOOL) --mode=link $(CC) $(OPT) $(LDFLAGS) -version-info $(LTVER) \
+ 	-rpath $(moduledir) -module -o $@ $? $(LIBS)
+ 
+ clean:
+--- a/contrib/slapd-modules/smbk5pwd/Makefile
++++ b/contrib/slapd-modules/smbk5pwd/Makefile
+@@ -46,12 +46,12 @@ moduledir = $(libexecdir)$(ldap_subdir)
+ .SUFFIXES: .c .o .lo
+ 
+ .c.lo:
+-	$(LIBTOOL) --mode=compile $(CC) $(OPT) $(DEFS) $(INCS) -c $<
++	$(LIBTOOL) --mode=compile $(CC) $(OPT) $(CFLAGS) $(DEFS) $(INCS) -c $<
+ 
+ all: $(PROGRAMS)
+ 
+ smbk5pwd.la:	smbk5pwd.lo
+-	$(LIBTOOL) --mode=link $(CC) $(OPT) -version-info $(LTVER) \
++	$(LIBTOOL) --mode=link $(CC) $(OPT) $(LDFLAGS) -version-info $(LTVER) \
+ 	-rpath $(moduledir) -module -o $@ $? $(LIBS)
+ 
+ clean:

@@ -1,0 +1,67 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:
+# Required-Start: $remote_fs $network $syslog
+# Required-Stop: $remote_fs $syslog
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: Glance Test Config
+# Description: OpenStack Image Test Config
+### END INIT INFO
+
+
+TEMPEST_CONF_FILE=/etc/tempest/tempest.conf
+temp_file="/tmp/do_note_delete_me.temp"
+
+
+function get_field() {
+    while read data; do
+        if [ "$1" -lt 0 ]; then
+            field="(\$(NF$1))"
+        else
+            field="\$$(($1 + 1))"
+        fi
+        echo "$data" | awk -F'[ \t]*\\|[ \t]*' "{print $field}"
+    done
+}
+
+start()
+{
+    if [ -e $TEMPEST_CONF_FILE ]; then
+        sleep 5
+        source /etc/nova/openrc
+        glance image-list > $temp_file 2>&1
+        if [ "$?" != "0" ]; then
+            echo "Glance service is not running"
+            exit 1
+        fi
+        id=`sed -n '4p' < $temp_file | get_field 1`
+        glance image-show $id > /dev/null 2>&1
+        if [ "$?" != "0" ]; then
+            cirros_image_file=`find /root/images/ -name "cirros*.img" | tail -1`
+            id=`glance image-create --name myfirstimage --is-public true --container-format bare --disk-format qcow2 --file ${cirros_image_file} | grep " id " | get_field 2`
+        fi
+        sed -i "s/^image_ref = .*/image_ref = ${id}/" $TEMPEST_CONF_FILE
+        sed -i "s/^image_ref_alt = .*/image_ref_alt = ${id}/" $TEMPEST_CONF_FILE
+        rm -f $temp_file > /dev/null 2>&1
+
+        nslookup google.com
+        [ "$?" != "0" ] && echo "WARNING: Make sure DNS server is setup correctly or else some tempest testcases will fail"
+    fi
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop|force-reload|restart|reload|status)
+        echo "WARNING: command $1 is not supported"
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|force-reload|restart|reload|status}"
+        exit 1
+        ;;
+esac
+
+exit 0

@@ -1,0 +1,20 @@
+From 8aec601d3531e7e0ba40df9d712e3754c5404f1a Mon Sep 17 00:00:00 2001
+From: Qian Lei <qianl.fnst@cn.fujitsu.com>
+Date: Tue, 27 Jan 2015 19:13:16 +0800
+Subject: [PATCH] Don't compile extensions.
+
+Signed-off-by: Qian Lei <qianl.fnst@cn.fujitsu.com>
+---
+ yajl-ruby.gemspec | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/yajl-ruby.gemspec b/yajl-ruby.gemspec
+index f601263..ecfeacf 100644
+--- a/yajl-ruby.gemspec
++++ b/yajl-ruby.gemspec
+@@ -9 +9 @@ Gem::Specification.new do |s|
+-  s.extensions = ["ext/yajl/extconf.rb"]
++#  s.extensions = ["ext/yajl/extconf.rb"]
+-- 
+1.8.3.1
+

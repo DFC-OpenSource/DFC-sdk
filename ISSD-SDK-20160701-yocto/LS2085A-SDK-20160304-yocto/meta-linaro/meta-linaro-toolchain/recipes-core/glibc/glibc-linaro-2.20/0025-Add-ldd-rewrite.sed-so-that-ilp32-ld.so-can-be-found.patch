@@ -1,0 +1,49 @@
+From 640294b548da2c45b2e06e7565197cfbfa71ceb4 Mon Sep 17 00:00:00 2001
+From: Andrew Pinski <apinski@cavium.com>
+Date: Mon, 27 Oct 2014 00:59:48 -0700
+Subject: [PATCH 25/32] Add ldd-rewrite.sed so that ilp32 ld.so can be found
+
+To be support multi-lib with ldd, we need to add a ldd-rewrite.sed file
+to rewrite RTLDLIST to include both ld.so's.
+
+* sysdeps/unix/sysv/linux/aarch64/configure.ac (ldd_rewrite_script):
+Set.
+* sysdeps/unix/sysv/linux/aarch64/configure: Regenerate.
+* sysdeps/unix/sysv/linux/aarch64/ldd-rewrite.sed: New file.
+---
+ sysdeps/unix/sysv/linux/aarch64/configure       | 2 ++
+ sysdeps/unix/sysv/linux/aarch64/configure.ac    | 2 ++
+ sysdeps/unix/sysv/linux/aarch64/ldd-rewrite.sed | 1 +
+ 3 files changed, 5 insertions(+)
+ create mode 100644 sysdeps/unix/sysv/linux/aarch64/ldd-rewrite.sed
+
+diff --git a/sysdeps/unix/sysv/linux/aarch64/configure b/sysdeps/unix/sysv/linux/aarch64/configure
+index 59372d2..faef1dd 100755
+--- a/sysdeps/unix/sysv/linux/aarch64/configure
++++ b/sysdeps/unix/sysv/linux/aarch64/configure
+@@ -31,3 +31,5 @@ case "$prefix" in
+ esac
+ fi
+ 
++ldd_rewrite_script=$dir/ldd-rewrite.sed
++
+diff --git a/sysdeps/unix/sysv/linux/aarch64/configure.ac b/sysdeps/unix/sysv/linux/aarch64/configure.ac
+index 6526816..3ca8ed1 100644
+--- a/sysdeps/unix/sysv/linux/aarch64/configure.ac
++++ b/sysdeps/unix/sysv/linux/aarch64/configure.ac
+@@ -9,3 +9,5 @@ else
+   LIBC_SLIBDIR_RTLDDIR([lib64], [lib])
+ fi
+ 
++ldd_rewrite_script=$dir/ldd-rewrite.sed
++
+diff --git a/sysdeps/unix/sysv/linux/aarch64/ldd-rewrite.sed b/sysdeps/unix/sysv/linux/aarch64/ldd-rewrite.sed
+new file mode 100644
+index 0000000..2f3bbb9
+--- /dev/null
++++ b/sysdeps/unix/sysv/linux/aarch64/ldd-rewrite.sed
+@@ -0,0 +1 @@
++s_^\(RTLDLIST=\)\(.*lib/\)\([^/]*\)\(-aarch64\)\(\|\_be\)\(\|\_ilp32\)\(.so\.[0-9.]*\)$_\1"\2\3-aarch64\5\7 \2\3-aarch64\5\_ilp32\7"_
+-- 
+1.9.3
+

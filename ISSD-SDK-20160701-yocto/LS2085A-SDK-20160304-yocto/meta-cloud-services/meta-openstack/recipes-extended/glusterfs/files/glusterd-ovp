@@ -1,0 +1,93 @@
+#!/bin/bash
+#
+# chkconfig: 35 20 80
+# description: Gluster File System service for volume management
+#
+
+# Get function from functions library
+. /etc/init.d/functions
+
+BASE=glusterd
+PIDFILE=/var/run/$BASE.pid
+PID=`test -f $PIDFILE && cat $PIDFILE`
+GLUSTERFSD=glusterfsd
+GLUSTERFS=glusterfs
+GLUSTERD_BIN=/usr/sbin/$BASE
+GLUSTERD_OPTS="--pid-file=$PIDFILE"
+GLUSTERD="$GLUSTERD_BIN $GLUSTERD_OPTS"
+RETVAL=0
+
+# Start the service $BASE
+start()
+{
+       # Force creation of the log directory even on a tmpfs /var/log.
+       mkdir -p /var/log/glusterfs
+
+       start-stop-daemon --stop --test --quiet --pidfile $PIDFILE
+       status=$?
+       if [ $status -eq 0 ]; then
+           echo "glusterd service is already running with pid $PID"
+           exit 1
+       else
+           echo -n $"Starting $BASE:"
+           start-stop-daemon --start --pidfile $PIDFILE \
+	     --exec $GLUSTERD_BIN -- "$GLUSTERD_OPTS"
+           RETVAL=$?
+           echo
+           [ $RETVAL -ne 0 ] && exit $RETVAL
+       fi
+}
+
+# Stop the service $BASE
+stop()
+{
+    echo -n $"Stopping $BASE:"
+    start-stop-daemon --stop --test --quiet --pidfile $PIDFILE
+    status=$?
+    if [ $status -eq 0 ]; then
+        start-stop-daemon --stop --quiet --pidfile $PIDFILE
+        [ -w $PIDFILE ] && rm -f $PIDFILE
+    else
+	start-stop-daemon --stop --quiet --name $BASE
+    fi
+
+    echo
+    pidof -c -o %PPID -x $GLUSTERFSD &> /dev/null
+    [ $? -eq 0 ] && start-stop-daemon --stop --quiet --name $GLUSTERFSD
+
+       #pidof -c -o %PPID -x $GLUSTERFS &> /dev/null
+       #[ $? -eq 0 ] && start-stop-daemon --stop --quiet --name $GLUSTERFS
+
+    if [ -f /etc/glusterd/nfs/run/nfs.pid ] ;then
+        pid=`cat /etc/glusterd/nfs/run/nfs.pid`;
+        cmd=`ps -p $pid -o comm=`
+
+        if [ $cmd == "glusterfs" ]; then
+	    start-stop-daemon --stop --quiet \
+	      --pidfile /etc/glusterd/nfs/run/nfs.pid
+        fi
+    fi
+}
+
+
+### service arguments ###
+case $1 in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    status)
+        status $BASE
+        ;;
+    restart | force-reload)
+        $0 stop
+        $0 start
+        ;;
+    *)
+        echo $"Usage: $0 {start|stop|status|restart}."
+        exit 1
+esac
+
+exit 0

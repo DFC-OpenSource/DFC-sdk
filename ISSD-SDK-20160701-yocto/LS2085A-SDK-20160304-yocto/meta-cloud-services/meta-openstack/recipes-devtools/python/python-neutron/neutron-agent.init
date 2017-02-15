@@ -1,0 +1,91 @@
+#! /bin/sh
+
+### BEGIN INIT INFO
+# Required-Start:    $remote_fs $syslog
+# Required-Stop:     $remote_fs $syslog
+# Default-Start:     2 3 5
+# Default-Stop:      0 1 6
+# Description:       Quantum networking agent
+### END INIT INFO
+
+SUFFIX=@suffix@
+DESC="neutron-$SUFFIX-agent"
+DAEMON="/usr/bin/neutron-$SUFFIX-agent"
+PIDFILE="/var/run/neutron-$SUFFIX-agent.pid"
+DAEMON_ARGS="@args@"
+
+start() 
+{
+    if [ -e $PIDFILE ]; then
+        PIDDIR=/proc/$(cat $PIDFILE)
+        if [ -d ${PIDDIR} ]; then
+            echo "$DESC already running."
+            exit 1
+        else
+            echo "Removing stale PID file $PIDFILE"
+            rm -f $PIDFILE
+        fi
+    fi
+
+    if [ ! -d /var/log/neutron ]; then
+        mkdir -p /var/log/neutron
+    fi  
+
+    echo -n "Starting $DESC..."
+
+    start-stop-daemon --start --quiet --background \
+        --pidfile ${PIDFILE} --make-pidfile --exec ${DAEMON} \
+	-- ${DAEMON_ARGS} --log-dir=/var/log/neutron
+
+    if [ $? -eq 0 ]; then
+        echo "done."
+    else
+        echo "failed."
+    fi
+}
+
+stop() 
+{
+    echo -n "Stopping $DESC..."
+    start-stop-daemon --stop --quiet --pidfile $PIDFILE
+    if [ $? -eq 0 ]; then
+        echo "done."
+    else
+        echo "failed."
+    fi
+    rm -f $PIDFILE
+}
+
+status()
+{
+    pid=`cat $PIDFILE 2>/dev/null`
+    if [ -n "$pid" ]; then
+        if ps -p $pid > /dev/null 2>&1 ; then
+            echo "$DESC is running"
+            return
+        fi
+    fi
+    echo "$DESC is not running"
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart|force-reload|reload|reset)
+        stop
+        start
+        ;;
+    status)
+	status
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|force-reload|restart|reload|status|reset}"
+        exit 1
+        ;;
+esac
+
+exit 0

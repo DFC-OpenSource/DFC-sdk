@@ -1,0 +1,35 @@
+Binary files git.orig/neutron/api/v2/.attributes.py.swp and git/neutron/api/v2/.attributes.py.swp differ
+Index: git/neutron/api/v2/attributes.py
+===================================================================
+--- git.orig/neutron/api/v2/attributes.py
++++ git/neutron/api/v2/attributes.py
+@@ -354,7 +354,10 @@
+ 
+ def _validate_uuid(data, valid_values=None):
+     if not uuidutils.is_uuid_like(data):
+-        msg = _("'%s' is not a valid UUID") % data
++        if data is not None and data != data.rstrip():
++            msg = _("'%s' is not a valid UUID: trailing whitespace?") % data
++        else:
++            msg = _("'%s' is not a valid UUID") % data
+         LOG.debug(msg)
+         return msg
+ 
+Index: git/neutron/plugins/cisco/n1kv/n1kv_neutron_plugin.py
+===================================================================
+--- git.orig/neutron/plugins/cisco/n1kv/n1kv_neutron_plugin.py
++++ git/neutron/plugins/cisco/n1kv/n1kv_neutron_plugin.py
+@@ -569,8 +569,11 @@
+                         raise n_exc.InvalidInput(error_message=msg)
+                 pair_list.append((segment, dot1qtag))
+             else:
+-                LOG.debug(_('%s is not a valid uuid'), segment)
+-                msg = _("'%s' is not a valid UUID") % segment
++                if segment is not None and segment != segment.rstrip():
++                    msg = _("'%s' is not a valid UUID: trailing whitespace?") % segment
++                else:
++                    msg = _("'%s' is not a valid UUID") % segment
++                LOG.debug(msg)
+                 raise n_exc.InvalidInput(error_message=msg)
+         return pair_list
+ 

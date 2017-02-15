@@ -1,0 +1,38 @@
+From aada9da49caca9e4a25764df2d2a2c11d9d95dbb Mon Sep 17 00:00:00 2001
+From: Bruce Ashfield <bruce.ashfield@windriver.com>
+Date: Fri, 10 Apr 2015 10:55:49 -0400
+Subject: [PATCH] lxc-helper: create local action() function
+
+Signed-off-by: Bruce Ashfield <bruce.ashfield@windriver.com>
+---
+ config/init/sysvinit/lxc.in | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/config/init/sysvinit/lxc.in b/config/init/sysvinit/lxc.in
+index 19c102e74c86..9f96a4f7496f 100644
+--- a/config/init/sysvinit/lxc.in
++++ b/config/init/sysvinit/lxc.in
+@@ -52,6 +52,20 @@ test ! -r "$sysconfdir"/sysconfig/lxc ||
+ # Check for needed utility program
+ [ -x "$bindir"/lxc-autostart ] || exit 1
+ 
++action()
++{
++    local STRING rc
++
++    STRING=$1
++    echo -n "$STRING "
++
++    shift
++    "$@" && success $"$STRING" || failure $"$STRING"
++    rc=$?
++
++    return $rc
++}
++
+ # If libvirtd is providing the bridge, it might not be
+ # immediately available, so wait a bit for it before starting
+ # up the containers or else any that use the bridge will fail
+-- 
+2.1.0
+

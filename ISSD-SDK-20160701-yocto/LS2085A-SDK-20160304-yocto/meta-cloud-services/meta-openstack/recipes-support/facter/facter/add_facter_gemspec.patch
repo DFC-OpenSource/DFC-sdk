@@ -1,0 +1,23 @@
+diff -urN facter-2.3.0_ori/facter.gemspec facter-2.3.0/facter.gemspec
+--- facter-2.3.0_ori/facter.gemspec	1970-01-01 08:00:00.000000000 +0800
++++ facter-2.3.0/facter.gemspec	2014-11-12 14:30:07.000000000 +0800
+@@ -0,0 +1,19 @@
++$:.unshift(File.dirname(__FILE__) + '/lib')
++require 'facter/version'
++
++Gem::Specification.new do |s|
++  s.name = 'facter'
++  s.version = Facter::FACTERVERSION
++  s.platform = Gem::Platform::RUBY
++  s.summary = 'Facter gathers basic facts about nodes (systems)'
++  s.description = s.summary
++  s.author = 'Yang Haibo'
++  s.email = 'b40869@freescale.com'
++  s.homepage = 'http://puppetlabs.com/facter'
++  s.license = 'Apache 2.0'
++
++  s.bindir       = 'bin'
++  s.executables  = ['facter']
++  s.require_path = 'lib'
++  s.files = %w(LICENSE README.md Rakefile) + Dir.glob('{lib,spec}/**/*')
++end

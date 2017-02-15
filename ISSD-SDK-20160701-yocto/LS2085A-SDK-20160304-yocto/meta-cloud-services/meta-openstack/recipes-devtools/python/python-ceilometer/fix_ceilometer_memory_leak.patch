@@ -1,0 +1,27 @@
+---
+ ceilometer/nova_client.py |    7 +++++++
+ 1 file changed, 7 insertions(+)
+
+--- a/ceilometer/nova_client.py
++++ b/ceilometer/nova_client.py
+@@ -26,6 +26,12 @@
+ 
+ LOG = log.getLogger(__name__)
+ 
++nova_client_opts = [
++    cfg.IntOpt('max_timing_buffer',
++               default=200,
++               help='The max number of the timing objects to keep'),
++]
++cfg.CONF.register_opts(nova_client_opts, group="nova_client")
+ 
+ def logged(func):
+ 
+@@ -56,6 +62,7 @@
+             endpoint_type=conf.os_endpoint_type,
+             cacert=conf.os_cacert,
+             no_cache=True)
++        self.nova_client.set_timings_max_len(cfg.CONF.nova_client.max_timing_buffer)
+ 
+     def _with_flavor_and_image(self, instances):
+         for instance in instances:

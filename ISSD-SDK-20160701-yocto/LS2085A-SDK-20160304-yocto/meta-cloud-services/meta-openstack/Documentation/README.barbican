@@ -1,0 +1,69 @@
+Summary
+=======
+
+This document is intended to provide an overview of the implementation
+details with the current release of Barbican.
+
+
+Limitation 1: No authorization required for retrieving secrets
+=============================================================
+
+The current implementation of Barbican allows secrets that are stored using
+authentication to be retrieved without authentication.  Thus, all stored
+secrets are available to anyone with access to the system.
+
+An example of this, can be seen from running the following commands, using
+the barbicanclient:
+$ barbican --os-username admin --os-password not-valid secret store \
+ -n mysecret -p 'top secret data' -t 'text/plain'
+returns: a failure as the username and password are not correct
+$ barbican --os-username admin --os-password password secret store \
+ -n mysecret -p 'top secret data' -t 'text/plain'
+returns: [the address retrieve the secret]
+$ barbican --no-auth secret get --decrypt [address returned above]
+returns: top secret data 
+
+
+Limitation 2: Integration with Keystone authentication
+=======================================================
+Introduced in the Grizzly release of OpenStack, Keystone by default uses
+PKI tokens as opposed to UUID tokens.  PKI tokens are much larger then UUID
+tokens (> 6000 bytes versus 16 bytes).  Without changing the maximum packet
+size, PKI tokens are too large to fit into a Barbican request packet.  The
+uWSGI maximum packet size has been increased to the maximum of 65355 bytes
+(from the default of 4096 bytes) in order to support PKI tokens by default.
+The larger PKI token size will increase the network load due to the larger
+packets that are sent when authentication is enabled.
+
+When using Barbican with Keystone authentication it is a known problem that
+due to the varying length of the PKI token secret size for Barbican has no
+fixed maximum.  There are two solutions to this problem:
+
+* Don't use Keystone authentication when storing secrets with Barbican
+* Change Keystone to revert back using UUID tokens instead of PKI tokens
+  (See next section below for the security implications of doing this)
+
+
+Changing Keystone to use UUID tokens
+====================================
+
+PKI tokens increase security by increasing the token size versus using UUID
+tokens. Reverting back to UUID tokens fixes the problem described above.
+However, the disadvantage is that you loose the security PKI tokens provide
+to all resources that use Keystone for authentication purposes, including
+Barbican.
+
+To have Keystone use UUID as tokens, change the bitbake recipe 
+(python-keystone_git.bb) by setting the TOKEN_FORMAT variable to a value of
+"UUID" and recompile. ie. Change the line TOKEN_FORMAT ?= "PKI" to
+TOKEN_FORMAT="UUID" in the python-keyston_git.bb file.
+
+
+Security Implications
+=====================
+
+* UUID tokens are shorter in length then UUID tokens, thus they are more
+  susceptible to brute force attacks.
+* Changing Keystone to use UUID tokens affects all system services that
+  rely on Keystone (for example, the Horizon web interface)
+

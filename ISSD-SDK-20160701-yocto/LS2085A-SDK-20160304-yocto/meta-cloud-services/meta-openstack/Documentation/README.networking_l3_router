@@ -1,0 +1,450 @@
+Networking - l3 router
+=========================
+
+Description
+-----------
+Using provider networks (such as we did for flat and vlan usecases)
+does not scale to large deployments, their downsides become quickly
+apparent. The l3-agent provides the ability to create routers that can
+handle routing between directly connected LAN interfaces and a single
+WAN interface.
+
+Here we setup a virtual router with a connection to a provider network
+(vlan) and 2 attached subnets. We don't use floating IPs for this
+demo.
+
+
+Assumptions
+-----------
+It is assumed you have completed the steps described in
+README.networking and have provisioned the host vSwitch as well as
+created the br-eth0 bridges on the controller and compute nodes.
+
+At this point you should be able to ping 192.168.7.4 from 192.168.7.4
+and vise versa.
+
+You have built your controller image including the cirros image (for
+which you have already added the image to glance as myFirstImage).
+
+You have run 'source /etc/nova/openrc'
+
+Configuration updates
+---------------------
+On the host Open vSwitch add an IP for 192.168.100.1/22
+sudo ip address add 192.168.100.1/22 broadcast 192.168.255.255 dev br-int
+
+On the controller and (all) compute nodes you must edit the file
+/etc/neutron/plugins/openvswitch/ovs_neutron_plugin.ini
+
+In the [OVS] section set
+network_vlan_ranges = ph-eth0:1998:1998
+bridge_mappings = ph-eth0:br-eth0
+
+(*** on compute nodes edit local_ip as well [192.168.7.4]***)
+
+Restart some services to allow these changes to take effect:
+/etc/init.d/neutron-openvswitch-agent reload
+(on controller)
+/etc/init.d/neutron-server reload
+/etc/init.d/neutron-dhcp-agent reload
+(on compute)
+/etc/init.d/nova-compute reload
+
+
+** edit /etc/neutron/l3-agent.ini
+use_namespaces = True
+external_network_bridge =
+
+/etc/init.d/neutron-l3-agent restart
+
+
+Create the provider network
+---------------------------
+neutron net-create --provider:physical_network=ph-eth0 \
+  --provider:network_type=vlan --provider:segmentation_id=1998 \
+  --shared --router:external=true GATEWAY_NET
+
+neutron subnet-create GATEWAY_NET 192.168.100.0/22 \
+  --name GATEWAY_SUBNET --gateway=192.168.100.1 \
+  --allocation-pool start=192.168.101.1,end=192.168.103.254
+
+
+Create the router
+-----------------
+neutron router-create NEUTRON-ROUTER
+Created a new router:
++-----------------------+--------------------------------------+
+| Field                 | Value                                |
++-----------------------+--------------------------------------+
+| admin_state_up        | True                                 |
+| external_gateway_info |                                      |
+| id                    | b27d1a20-8a31-46d5-bdef-32a5ccf4ec91 |
+| name                  | NEUTRON-ROUTER                       |
+| status                | ACTIVE                               |
+| tenant_id             | b5890ba3fb234347ae317ca2f8358663     |
++-----------------------+--------------------------------------+
+
+neutron router-gateway-set NEUTRON-ROUTER GATEWAY_NET
+Set gateway for router NEUTRON-ROUTER
+
+Inspect the created network namespaces
+--------------------------------------
+root@controller:~# ip netns
+qrouter-b27d1a20-8a31-46d5-bdef-32a5ccf4ec91
+qdhcp-498fa1f2-87de-4874-8ca9-f4ba3e394d2a
+
+ip netns exec qrouter-b27d1a20-8a31-46d5-bdef-32a5ccf4ec91 ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default 
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: sit0: <NOARP> mtu 1480 qdisc noop state DOWN group default 
+    link/sit 0.0.0.0 brd 0.0.0.0
+20: qg-19f6d85f-a6: <BROADCAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN group default 
+    link/ether fa:16:3e:b8:1e:9d brd ff:ff:ff:ff:ff:ff
+    inet 192.168.101.1/22 brd 192.168.103.255 scope global qg-19f6d85f-a6
+       valid_lft forever preferred_lft forever
+    inet6 fe80::f816:3eff:feb8:1e9d/64 scope link 
+       valid_lft forever preferred_lft forever
+
+
+Attach tenant networks
+----------------------
+neutron net-create --provider:network_type=gre --provider:segmentation_id=10 \
+  --shared APPS_NET
+Created a new network:
++---------------------------+--------------------------------------+
+| Field                     | Value                                |
++---------------------------+--------------------------------------+
+| admin_state_up            | True                                 |
+| id                        | 52f4549f-aeed-4fcf-997b-4349f591cd5f |
+| name                      | APPS_NET                             |
+| provider:network_type     | gre                                  |
+| provider:physical_network |                                      |
+| provider:segmentation_id  | 10                                   |
+| shared                    | True                                 |
+| status                    | ACTIVE                               |
+| subnets                   |                                      |
+| tenant_id                 | b5890ba3fb234347ae317ca2f8358663     |
++---------------------------+--------------------------------------+
+
+neutron net-create --provider:network_type=gre --provider:segmentation_id=20 \
+  --shared DMZ_NET
+Created a new network:
++---------------------------+--------------------------------------+
+| Field                     | Value                                |
++---------------------------+--------------------------------------+
+| admin_state_up            | True                                 |
+| id                        | eeb07b09-4b4a-4c2c-9060-0b8e414a9279 |
+| name                      | DMZ_NET                              |
+| provider:network_type     | gre                                  |
+| provider:physical_network |                                      |
+| provider:segmentation_id  | 20                                   |
+| shared                    | True                                 |
+| status                    | ACTIVE                               |
+| subnets                   |                                      |
+| tenant_id                 | b5890ba3fb234347ae317ca2f8358663     |
++---------------------------+--------------------------------------+
+
+neutron subnet-create APPS_NET 10.241.0.0/22 --name APPS_SUBNET
+Created a new subnet:
++------------------+------------------------------------------------+
+| Field            | Value                                          |
++------------------+------------------------------------------------+
+| allocation_pools | {"start": "10.241.0.2", "end": "10.241.3.254"} |
+| cidr             | 10.241.0.0/22                                  |
+| dns_nameservers  |                                                |
+| enable_dhcp      | True                                           |
+| gateway_ip       | 10.241.0.1                                     |
+| host_routes      |                                                |
+| id               | 45e7d887-1c4c-485a-9247-2a2bec9e3714           |
+| ip_version       | 4                                              |
+| name             | APPS_SUBNET                                    |
+| network_id       | 52f4549f-aeed-4fcf-997b-4349f591cd5f           |
+| tenant_id        | b5890ba3fb234347ae317ca2f8358663               |
++------------------+------------------------------------------------+
+
+neutron subnet-create DMZ_NET 10.242.0.0/22 --name DMZ_SUBNET
+Created a new subnet:
++------------------+------------------------------------------------+
+| Field            | Value                                          |
++------------------+------------------------------------------------+
+| allocation_pools | {"start": "10.242.0.2", "end": "10.242.3.254"} |
+| cidr             | 10.242.0.0/22                                  |
+| dns_nameservers  |                                                |
+| enable_dhcp      | True                                           |
+| gateway_ip       | 10.242.0.1                                     |
+| host_routes      |                                                |
+| id               | 2deda040-be04-432b-baa6-3a2219d22f20           |
+| ip_version       | 4                                              |
+| name             | DMZ_SUBNET                                     |
+| network_id       | eeb07b09-4b4a-4c2c-9060-0b8e414a9279           |
+| tenant_id        | b5890ba3fb234347ae317ca2f8358663               |
++------------------+------------------------------------------------+
+
+neutron router-interface-add NEUTRON-ROUTER APPS_SUBNET
+Added interface 58f3db35-f5df-4fd1-9735-4ff13dd342de to router NEUTRON-ROUTER.
+
+neutron router-interface-add NEUTRON-ROUTER DMZ_SUBNET
+Added interface 9252ec29-7aac-4550-821c-f910f10680cf to router NEUTRON-ROUTER.
+
+ip netns exec qrouter-b27d1a20-8a31-46d5-bdef-32a5ccf4ec91 ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default 
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: sit0: <NOARP> mtu 1480 qdisc noop state DOWN group default 
+    link/sit 0.0.0.0 brd 0.0.0.0
+20: qg-19f6d85f-a6: <BROADCAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN group default 
+    link/ether fa:16:3e:b8:1e:9d brd ff:ff:ff:ff:ff:ff
+    inet 192.168.101.1/22 brd 192.168.103.255 scope global qg-19f6d85f-a6
+       valid_lft forever preferred_lft forever
+    inet6 fe80::f816:3eff:feb8:1e9d/64 scope link 
+       valid_lft forever preferred_lft forever
+21: qr-58f3db35-f5: <BROADCAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN group default 
+    link/ether fa:16:3e:76:ec:23 brd ff:ff:ff:ff:ff:ff
+    inet 10.241.0.1/22 brd 10.241.3.255 scope global qr-58f3db35-f5
+       valid_lft forever preferred_lft forever
+    inet6 fe80::f816:3eff:fe76:ec23/64 scope link 
+       valid_lft forever preferred_lft forever
+22: qr-9252ec29-7a: <BROADCAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN group default 
+    link/ether fa:16:3e:fb:98:06 brd ff:ff:ff:ff:ff:ff
+    inet 10.242.0.1/22 brd 10.242.3.255 scope global qr-9252ec29-7a
+       valid_lft forever preferred_lft forever
+    inet6 fe80::f816:3eff:fefb:9806/64 scope link 
+       valid_lft forever preferred_lft forever
+
+Note the two new interfaces.
+1 connection to the provider network
+2 connections to the subnets (1 to APPS_SUBNET, 1 to DMZ_SUBNET)
+
+Boot an instance
+---------------
+nova boot --flavor=m1.small --image=myFirstImage \
+  --nic net-id=52f4549f-aeed-4fcf-997b-4349f591cd5f APPS_INSTANCE
++--------------------------------------+-----------------------------------------------------+
+| Property                             | Value                                               |
++--------------------------------------+-----------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                              |
+| OS-EXT-AZ:availability_zone          | nova                                                |
+| OS-EXT-SRV-ATTR:host                 | -                                                   |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | -                                                   |
+| OS-EXT-SRV-ATTR:instance_name        | instance-0000000e                                   |
+| OS-EXT-STS:power_state               | 0                                                   |
+| OS-EXT-STS:task_state                | scheduling                                          |
+| OS-EXT-STS:vm_state                  | building                                            |
+| OS-SRV-USG:launched_at               | -                                                   |
+| OS-SRV-USG:terminated_at             | -                                                   |
+| accessIPv4                           |                                                     |
+| accessIPv6                           |                                                     |
+| adminPass                            | jdLkr4i6ATvQ                                        |
+| config_drive                         |                                                     |
+| created                              | 2014-04-10T16:27:31Z                                |
+| flavor                               | m1.small (2)                                        |
+| hostId                               |                                                     |
+| id                                   | fc849bb9-54d3-4a9a-99a4-6346a6eef404                |
+| image                                | myFirstImage (f22d3ab8-96a5-46db-a029-7d59156c8e31) |
+| key_name                             | -                                                   |
+| metadata                             | {}                                                  |
+| name                                 | APPS_INSTANCE                                       |
+| os-extended-volumes:volumes_attached | []                                                  |
+| progress                             | 0                                                   |
+| security_groups                      | default                                             |
+| status                               | BUILD                                               |
+| tenant_id                            | b5890ba3fb234347ae317ca2f8358663                    |
+| updated                              | 2014-04-10T16:27:31Z                                |
+| user_id                              | 1dfcb72ef6a7428d8dd7300bc7f303d9                    |
++--------------------------------------+-----------------------------------------------------+
+
+nova boot --flavor=m1.small --image=myFirstImage \
+  --nic net-id=eeb07b09-4b4a-4c2c-9060-0b8e414a9279 DMZ_INSTANCE
++--------------------------------------+-----------------------------------------------------+
+| Property                             | Value                                               |
++--------------------------------------+-----------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                              |
+| OS-EXT-AZ:availability_zone          | nova                                                |
+| OS-EXT-SRV-ATTR:host                 | -                                                   |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | -                                                   |
+| OS-EXT-SRV-ATTR:instance_name        | instance-0000000f                                   |
+| OS-EXT-STS:power_state               | 0                                                   |
+| OS-EXT-STS:task_state                | scheduling                                          |
+| OS-EXT-STS:vm_state                  | building                                            |
+| OS-SRV-USG:launched_at               | -                                                   |
+| OS-SRV-USG:terminated_at             | -                                                   |
+| accessIPv4                           |                                                     |
+| accessIPv6                           |                                                     |
+| adminPass                            | 4d7UsUJhSpBd                                        |
+| config_drive                         |                                                     |
+| created                              | 2014-04-10T16:29:25Z                                |
+| flavor                               | m1.small (2)                                        |
+| hostId                               |                                                     |
+| id                                   | f281c349-d49c-4d6c-bf56-74f04f2e8aec                |
+| image                                | myFirstImage (f22d3ab8-96a5-46db-a029-7d59156c8e31) |
+| key_name                             | -                                                   |
+| metadata                             | {}                                                  |
+| name                                 | DMZ_INSTANCE                                        |
+| os-extended-volumes:volumes_attached | []                                                  |
+| progress                             | 0                                                   |
+| security_groups                      | default                                             |
+| status                               | BUILD                                               |
+| tenant_id                            | b5890ba3fb234347ae317ca2f8358663                    |
+| updated                              | 2014-04-10T16:29:25Z                                |
+| user_id                              | 1dfcb72ef6a7428d8dd7300bc7f303d9                    |
++--------------------------------------+-----------------------------------------------------+
+
+Check connectivity
+------------------
+nova console-log APPS_INSTANCE
+...skip
+Starting network...
+udhcpc (v1.18.5) started
+Sending discover...
+Sending select for 10.241.0.2...
+Lease of 10.241.0.2 obtained, lease time 86400
+..skip
+
+nova console-log DMZ_INSTANCE
+...skip
+Starting network...
+udhcpc (v1.18.5) started
+Sending discover...
+Sending select for 10.242.0.2...
+Lease of 10.242.0.2 obtained, lease time 86400
+...skip
+
+root@controller:~# nova list
++--------------------------------------+---------------+--------+------------+-------------+---------------------+
+| ID                                   | Name          | Status | Task State | Power State | Networks            |
++--------------------------------------+---------------+--------+------------+-------------+---------------------+
+| fc849bb9-54d3-4a9a-99a4-6346a6eef404 | APPS_INSTANCE | ACTIVE | -          | Running     | APPS_NET=10.241.0.2 |
+| f281c349-d49c-4d6c-bf56-74f04f2e8aec | DMZ_INSTANCE  | ACTIVE | -          | Running     | DMZ_NET=10.242.0.2  |
++--------------------------------------+---------------+--------+------------+-------------+---------------------+
+
+
+ping
+---
+Since we are not using floating IPs you will only be able ping from inside the route namespace
+
+# ip netns exec qrouter-b27d1a20-8a31-46d5-bdef-32a5ccf4ec91 \
+  ping 10.241.0.2 -c 1
+PING 10.241.0.2 (10.241.0.2) 56(84) bytes of data.
+64 bytes from 10.241.0.2: icmp_seq=1 ttl=64 time=6.32 ms
+
+--- 10.241.0.2 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 6.328/6.328/6.328/0.000 ms
+
+# ping 10.241.0.2 -c 1
+connect: Network is unreachable
+
+
+The final Open vSwitch configs
+------------------------------
+
+Controller
+---
+root@controller:~# ovs-vsctl show
+524a6c84-226d-427b-8efa-732ed7e7fa43
+    Bridge "br-eth0"
+        Port "eth0"
+            Interface "eth0"
+        Port "br-eth0"
+            Interface "br-eth0"
+                type: internal
+        Port "phy-br-eth0"
+            Interface "phy-br-eth0"
+    Bridge br-tun
+        Port patch-int
+            Interface patch-int
+                type: patch
+                options: {peer=patch-tun}
+        Port "gre-2"
+            Interface "gre-2"
+                type: gre
+                options: {in_key=flow, local_ip="192.168.7.2", out_key=flow, remote_ip="192.168.7.4"}
+        Port br-tun
+            Interface br-tun
+                type: internal
+    Bridge br-int
+        Port "qr-58f3db35-f5"
+            tag: 2
+            Interface "qr-58f3db35-f5"
+                type: internal
+        Port "tap6e65f2e5-39"
+            tag: 3
+            Interface "tap6e65f2e5-39"
+                type: internal
+        Port "qr-9252ec29-7a"
+            tag: 3
+            Interface "qr-9252ec29-7a"
+                type: internal
+        Port "int-br-eth0"
+            Interface "int-br-eth0"
+        Port patch-tun
+            Interface patch-tun
+                type: patch
+                options: {peer=patch-int}
+        Port "tapcf2a0e68-6b"
+            tag: 2
+            Interface "tapcf2a0e68-6b"
+                type: internal
+        Port br-int
+            Interface br-int
+                type: internal
+        Port "qg-19f6d85f-a6"
+            tag: 1
+            Interface "qg-19f6d85f-a6"
+                type: internal
+    ovs_version: "2.0.0"
+
+
+Compute
+---
+root@compute:~# ovs-vsctl show
+99d365d2-f74e-40a8-b9a0-5bb60353675d
+    Bridge br-int
+        Port br-int
+            Interface br-int
+                type: internal
+        Port patch-tun
+            Interface patch-tun
+                type: patch
+                options: {peer=patch-int}
+        Port "tapc2db0bfa-ae"
+            tag: 1
+            Interface "tapc2db0bfa-ae"
+        Port "tap57fae225-16"
+            tag: 2
+            Interface "tap57fae225-16"
+        Port "int-br-eth0"
+            Interface "int-br-eth0"
+    Bridge "br-eth0"
+        Port "eth0"
+            Interface "eth0"
+        Port "phy-br-eth0"
+            Interface "phy-br-eth0"
+        Port "br-eth0"
+            Interface "br-eth0"
+                type: internal
+    Bridge br-tun
+        Port br-tun
+            Interface br-tun
+                type: internal
+        Port "gre-1"
+            Interface "gre-1"
+                type: gre
+                options: {in_key=flow, local_ip="192.168.7.4", out_key=flow, remote_ip="192.168.7.2"}
+        Port patch-int
+            Interface patch-int
+                type: patch
+                options: {peer=patch-tun}
+    ovs_version: "2.0.0"
+
+
+References
+----------
+http:// developer.rackspace.com/blog/neutron-networking-l3-agent.html

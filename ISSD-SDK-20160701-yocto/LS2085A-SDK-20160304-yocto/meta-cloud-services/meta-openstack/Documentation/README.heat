@@ -1,0 +1,532 @@
+Summary
+=======
+
+This document is not intended to provide detail of how Heat in general
+works, but rather it describes how Heat is tested to ensure that Heat
+is working correctly.
+
+
+Heat Overview
+=============
+
+Heat is template-driven orchestration engine which enables you to orchestrate
+multiple composite cloud applications.  Heat stack is a set of resources
+(including nova compute VMs, cinder volumes, neutron IPs...) which are described
+by heat orchestration template (a.k.a HOT) file.
+
+Heat interacts with Ceilometer to provide autoscaling feature in which when
+resources within a stack reach certain watermark (e.g. cpu utilization hits 70%)
+then Heat can add or remove resources into or out of that stack to handle
+the changing demands.
+
+
+Test Steps
+==========
+
+Please note: the following commands/steps are carried on Controller
+node, unless otherwise explicitly indicated.
+
+    $ Start Controller and Compute node
+    $ . /etc/nova/openrc
+    $ glance image-create --name myfirstimage --is-public true --container-format bare --disk-format qcow2 --file /root/images/cirros-*-x86_64-disk.img
+    $ glance image-list
++--------------------------------------+--------------+-------------+------------------+---------+--------+
+| ID                                   | Name         | Disk Format | Container Format | Size    | Status |
++--------------------------------------+--------------+-------------+------------------+---------+--------+
+| a71b84d3-e656-43f5-afdc-ac67cf4f398a | myfirstimage | qcow2       | bare             | 9761280 | active |
++--------------------------------------+--------------+-------------+------------------+---------+--------+
+
+    $ neutron net-create mynetwork
+    $ neutron net-list
++--------------------------------------+-----------+---------+
+| id                                   | name      | subnets |
++--------------------------------------+-----------+---------+
+| 8c9c8a6f-d90f-479f-82b0-7f6e963b39d7 | mynetwork |         |
++--------------------------------------+-----------+---------+
+
+    $ /etc/cinder/add-cinder-volume-types.sh
+    $ cinder create --volume_type nfs --display_name nfs_vol_1 3
+    $ cinder create --volume_type glusterfs --display_name glusterfs_vol_1 2
+    $ cinder list
++--------------------------------------+-----------+-----------------+------+-------------+----------+-------------+
+|                  ID                  |   Status  |   Display Name  | Size | Volume Type | Bootable | Attached to |
++--------------------------------------+-----------+-----------------+------+-------------+----------+-------------+
+| 1d283cf7-2258-4038-a31b-5cb5fba995f3 | available |    nfs_vol_1    |  3   |     nfs     |  false   |             |
+| c46276fb-e3df-4093-b759-2ce03c4cefd5 | available | glusterfs_vol_1 |  2   |  glusterfs  |  false   |             |
++--------------------------------------+-----------+-----------------+------+-------------+----------+-------------+
+
+    *** The below test steps are for testing lifecycle management ***
+
+    $ heat stack-create -f /etc/heat/templates/two_vms_example.template -P "vol_2_id=c46276fb-e3df-4093-b759-2ce03c4cefd5" mystack
+    $ Keep running "heat stack-list" until seeing
++--------------------------------------+------------+-----------------+----------------------+
+| id                                   | stack_name | stack_status    | creation_time        |
++--------------------------------------+------------+-----------------+----------------------+
+| 8d79a777-2e09-4d06-a04e-8430df341514 | mystack    | CREATE_COMPLETE | 2014-05-08T16:36:22Z |
++--------------------------------------+------------+-----------------+----------------------+
+
+    $ nova list
++--------------------------------------+---------------------------+--------+------------+-------------+----------+
+| ID                                   | Name                      | Status | Task State | Power State | Networks |
++--------------------------------------+---------------------------+--------+------------+-------------+----------+
+| e58da67a-9a22-4db2-9d1e-0a1810df2f2e | mystack-vm_1-j5tq5m2ppk3z | ACTIVE | -          | Running     |          |
+| fe1b693e-db8c-4d74-b840-7dae8acef0c1 | mystack-vm_2-oiu6mzg3jjv2 | ACTIVE | -          | Running     |          |
++--------------------------------------+---------------------------+--------+------------+-------------+----------+
+
+(Should see 2 VMs: vm_1 and vm_2 as defined in two_vms_example.template)
+
+    $ cinder list
++--------------------------------------+-----------+----------------------------+------+-------------+----------+--------------------------------------+
+|                  ID                  |   Status  |        Display Name        | Size | Volume Type | Bootable |             Attached to              |
++--------------------------------------+-----------+----------------------------+------+-------------+----------+--------------------------------------+
+| 1d283cf7-2258-4038-a31b-5cb5fba995f3 | available |         nfs_vol_1          |  3   |     nfs     |  false   |                                      |
+| 58b55eb9-e619-4c2e-bfd8-ebc349aff02b |   in-use  | mystack-vol_1-5xk2zotoxidr |  1   |  lvm_iscsi  |  false   | e58da67a-9a22-4db2-9d1e-0a1810df2f2e |
+| c46276fb-e3df-4093-b759-2ce03c4cefd5 |   in-use  |      glusterfs_vol_1       |  2   |  glusterfs  |  false   | e58da67a-9a22-4db2-9d1e-0a1810df2f2e |
++--------------------------------------+-----------+----------------------------+------+-------------+----------+--------------------------------------+
+
+(2 Cinder volumes are attached to vm_1)
+
+    $ From Dashboard, log into vm_1, and run "cat /proc/partitions"
+(Should see partitions vdb of 1G and vdc of 2G)
+
+    $ heat stack-show 8d79a777-2e09-4d06-a04e-8430df341514
+
+(Command should return lot of info)
+
+    $ heat resource-list mystack
++------------------+------------------------------+-----------------+----------------------+
+| resource_name    | resource_type                | resource_status | updated_time         |
++------------------+------------------------------+-----------------+----------------------+
+| vol_1            | OS::Cinder::Volume           | CREATE_COMPLETE | 2014-05-08T16:36:24Z |
+| vm_2             | OS::Nova::Server             | CREATE_COMPLETE | 2014-05-08T16:36:56Z |
+| vm_1             | OS::Nova::Server             | CREATE_COMPLETE | 2014-05-08T16:37:26Z |
+| vol_2_attachment | OS::Cinder::VolumeAttachment | CREATE_COMPLETE | 2014-05-08T16:37:28Z |
+| vol_1_attachment | OS::Cinder::VolumeAttachment | CREATE_COMPLETE | 2014-05-08T16:37:31Z |
++------------------+------------------------------+-----------------+----------------------+
+
+(Should see all 5 resources defined in two_vms_example.template)
+
+    $ heat resource-show mystack vm_1
++------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+| Property               | Value                                                                                                                              |
++------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+| description            |                                                                                                                                    |
+| links                  | http://128.224.149.168:8004/v1/088d10de18a84442a7a03497e834e2af/stacks/mystack/8d79a777-2e09-4d06-a04e-8430df341514/resources/vm_1 |
+|                        | http://128.224.149.168:8004/v1/088d10de18a84442a7a03497e834e2af/stacks/mystack/8d79a777-2e09-4d06-a04e-8430df341514                |
+| logical_resource_id    | vm_1                                                                                                                               |
+| physical_resource_id   | e58da67a-9a22-4db2-9d1e-0a1810df2f2e                                                                                               |
+| required_by            | vol_1_attachment                                                                                                                   |
+|                        | vol_2_attachment                                                                                                                   |
+| resource_name          | vm_1                                                                                                                               |
+| resource_status        | CREATE_COMPLETE                                                                                                                    |
+| resource_status_reason | state changed                                                                                                                      |
+| resource_type          | OS::Nova::Server                                                                                                                   |
+| updated_time           | 2014-05-08T16:37:26Z                                                                                                               |
++------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+
+    $ heat template-show mystack
+
+(The content of this command should be the same as content of two_vms_example.template)
+
+    $ heat event-list mystack
++------------------+-----+------------------------+--------------------+----------------------+
+| resource_name    | id  | resource_status_reason | resource_status    | event_time           |
++------------------+-----+------------------------+--------------------+----------------------+
+| vm_1             | 700 | state changed          | CREATE_IN_PROGRESS | 2014-05-08T16:36:22Z |
+| vm_1             | 704 | state changed          | CREATE_COMPLETE    | 2014-05-08T16:37:26Z |
+| vm_2             | 699 | state changed          | CREATE_IN_PROGRESS | 2014-05-08T16:36:22Z |
+| vm_2             | 703 | state changed          | CREATE_COMPLETE    | 2014-05-08T16:36:56Z |
+| vol_1            | 701 | state changed          | CREATE_IN_PROGRESS | 2014-05-08T16:36:22Z |
+| vol_1            | 702 | state changed          | CREATE_COMPLETE    | 2014-05-08T16:36:24Z |
+| vol_1_attachment | 706 | state changed          | CREATE_IN_PROGRESS | 2014-05-08T16:37:27Z |
+| vol_1_attachment | 708 | state changed          | CREATE_COMPLETE    | 2014-05-08T16:37:31Z |
+| vol_2_attachment | 705 | state changed          | CREATE_IN_PROGRESS | 2014-05-08T16:37:26Z |
+| vol_2_attachment | 707 | state changed          | CREATE_COMPLETE    | 2014-05-08T16:37:28Z |
++------------------+-----+------------------------+--------------------+----------------------+
+
+    $ heat action-suspend mystack
+    $ Keep running "heat stack-list" until seeing
++--------------------------------------+------------+------------------+----------------------+
+| id                                   | stack_name | stack_status     | creation_time        |
++--------------------------------------+------------+------------------+----------------------+
+| 8d79a777-2e09-4d06-a04e-8430df341514 | mystack    | SUSPEND_COMPLETE | 2014-05-08T16:36:22Z |
++--------------------------------------+------------+------------------+----------------------+
+
+    $ nova list
++--------------------------------------+---------------------------+-----------+------------+-------------+----------+
+| ID                                   | Name                      | Status    | Task State | Power State | Networks |
++--------------------------------------+---------------------------+-----------+------------+-------------+----------+
+| e58da67a-9a22-4db2-9d1e-0a1810df2f2e | mystack-vm_1-j5tq5m2ppk3z | SUSPENDED | -          | Shutdown    |          |
+| fe1b693e-db8c-4d74-b840-7dae8acef0c1 | mystack-vm_2-oiu6mzg3jjv2 | SUSPENDED | -          | Shutdown    |          |
++--------------------------------------+---------------------------+-----------+------------+-------------+----------+
+
+(2 VMs are in suspeded mode)
+
+    $ Wait for 2 minutes
+    $ heat action-resume mystack
+    $ Keep running "heat stack-list" until seeing
++--------------------------------------+------------+-----------------+----------------------+
+| id                                   | stack_name | stack_status    | creation_time        |
++--------------------------------------+------------+-----------------+----------------------+
+| 8d79a777-2e09-4d06-a04e-8430df341514 | mystack    | RESUME_COMPLETE | 2014-05-08T16:36:22Z |
++--------------------------------------+------------+-----------------+----------------------+
+
+    $ nova list
++--------------------------------------+---------------------------+--------+------------+-------------+----------+
+| ID                                   | Name                      | Status | Task State | Power State | Networks |
++--------------------------------------+---------------------------+--------+------------+-------------+----------+
+| e58da67a-9a22-4db2-9d1e-0a1810df2f2e | mystack-vm_1-j5tq5m2ppk3z | ACTIVE | -          | Running     |          |
+| fe1b693e-db8c-4d74-b840-7dae8acef0c1 | mystack-vm_2-oiu6mzg3jjv2 | ACTIVE | -          | Running     |          |
++--------------------------------------+---------------------------+--------+------------+-------------+----------+
+
+    $ nova show e58da67a-9a22-4db2-9d1e-0a1810df2f2e | grep flavor
+| flavor                               | m1.tiny (1)
+
+(Should see m1.tiny flavour for vm_2 by default)
+
+    $ heat stack-update -f /etc/heat/templates/two_vms_example.template -P "vol_2_id=c46276fb-e3df-4093-b759-2ce03c4cefd5;vm_type=m1.small" mystack
+(Update vm_2 flavour from m1.tiny to m1.small)
+
+    $ Keep running "heat stack-list" until seeing
++--------------------------------------+------------+-----------------+----------------------+
+| id                                   | stack_name | stack_status    | creation_time        |
++--------------------------------------+------------+-----------------+----------------------+
+| 8d79a777-2e09-4d06-a04e-8430df341514 | mystack    | UPDATE_COMPLETE | 2014-05-08T16:36:22Z |
++--------------------------------------+------------+-----------------+----------------------+
+
+    $ nova list
++--------------------------------------+---------------------------+--------+------------+-------------+----------+
+| ID                                   | Name                      | Status | Task State | Power State | Networks |
++--------------------------------------+---------------------------+--------+------------+-------------+----------+
+| e58da67a-9a22-4db2-9d1e-0a1810df2f2e | mystack-vm_1-j5tq5m2ppk3z | ACTIVE | -          | Running     |          |
+| fe1b693e-db8c-4d74-b840-7dae8acef0c1 | mystack-vm_2-oiu6mzg3jjv2 | ACTIVE | -          | Running     |          |
++--------------------------------------+---------------------------+--------+------------+-------------+----------+
+
+    $ nova show e58da67a-9a22-4db2-9d1e-0a1810df2f2e | grep flavor
+| flavor                               | m1.small (2)                                             |
+
+(Should see m1.small flavour for vm_2.  This demonstrates that its able to update)
+
+    $ heat stack-create -f /etc/heat/templates/two_vms_example.template -P "vol_2_id=1d283cf7-2258-4038-a31b-5cb5fba995f3" mystack2
+    $ Keep running "heat stack-list" until seeing
++--------------------------------------+------------+-----------------+----------------------+
+| id                                   | stack_name | stack_status    | creation_time        |
++--------------------------------------+------------+-----------------+----------------------+
+| 8d79a777-2e09-4d06-a04e-8430df341514 | mystack    | UPDATE_COMPLETE | 2014-05-08T16:36:22Z |
+| 258e05fd-370b-4017-818a-4bb573ac3982 | mystack2   | CREATE_COMPLETE | 2014-05-08T16:46:12Z |
++--------------------------------------+------------+-----------------+----------------------+
+
+    $ nova list
++--------------------------------------+----------------------------+--------+------------+-------------+----------+
+| ID                                   | Name                       | Status | Task State | Power State | Networks |
++--------------------------------------+----------------------------+--------+------------+-------------+----------+
+| e58da67a-9a22-4db2-9d1e-0a1810df2f2e | mystack-vm_1-j5tq5m2ppk3z  | ACTIVE | -          | Running     |          |
+| fe1b693e-db8c-4d74-b840-7dae8acef0c1 | mystack-vm_2-oiu6mzg3jjv2  | ACTIVE | -          | Running     |          |
+| 181931ae-4c3b-488d-a7c6-4c4b08f6a35b | mystack2-vm_1-hmy5feakes2q | ACTIVE | -          | Running     |          |
+| c80aaea9-276f-4bdb-94d5-9e0c5434f269 | mystack2-vm_2-6b4nzxecda3j | ACTIVE | -          | Running     |          |
++--------------------------------------+----------------------------+--------+------------+-------------+----------+
+
+    $ cinder list
++--------------------------------------+--------+-----------------------------+------+-------------+----------+--------------------------------------+
+|                  ID                  | Status |         Display Name        | Size | Volume Type | Bootable |             Attached to              |
++--------------------------------------+--------+-----------------------------+------+-------------+----------+--------------------------------------+
+| 1d283cf7-2258-4038-a31b-5cb5fba995f3 | in-use |          nfs_vol_1          |  3   |     nfs     |  false   | 181931ae-4c3b-488d-a7c6-4c4b08f6a35b |
+| 2175db16-5569-45eb-af8b-2b967e2b808c | in-use | mystack2-vol_1-ey6udylsdqbo |  1   |  lvm_iscsi  |  false   | 181931ae-4c3b-488d-a7c6-4c4b08f6a35b |
+| 58b55eb9-e619-4c2e-bfd8-ebc349aff02b | in-use |  mystack-vol_1-5xk2zotoxidr |  1   |  lvm_iscsi  |  false   | e58da67a-9a22-4db2-9d1e-0a1810df2f2e |
+| c46276fb-e3df-4093-b759-2ce03c4cefd5 | in-use |       glusterfs_vol_1       |  2   |  glusterfs  |  false   | e58da67a-9a22-4db2-9d1e-0a1810df2f2e |
++--------------------------------------+--------+-----------------------------+------+-------------+----------+--------------------------------------+
+
+    $ Wait for 5 minutes
+    $ heat stack-delete mystack2
+    $ heat stack-delete mystack
+    $ Keep running "heat stack-list" until seeing
++----+------------+--------------+---------------+
+| id | stack_name | stack_status | creation_time |
++----+------------+--------------+---------------+
++----+------------+--------------+---------------+
+
+    $ nova list
++----+------+--------+------------+-------------+----------+
+| ID | Name | Status | Task State | Power State | Networks |
++----+------+--------+------------+-------------+----------+
++----+------+--------+------------+-------------+----------+
+
+    $ cinder list
++--------------------------------------+-----------+-----------------+------+-------------+----------+-------------+
+|                  ID                  |   Status  |   Display Name  | Size | Volume Type | Bootable | Attached to |
++--------------------------------------+-----------+-----------------+------+-------------+----------+-------------+
+| 1d283cf7-2258-4038-a31b-5cb5fba995f3 | available |    nfs_vol_1    |  3   |     nfs     |  false   |             |
+| c46276fb-e3df-4093-b759-2ce03c4cefd5 | available | glusterfs_vol_1 |  2   |  glusterfs  |  false   |             |
++--------------------------------------+-----------+-----------------+------+-------------+----------+-------------+
+
+    *** The below test steps are for testing autoscaling ***
+
+    $ By default, Ceilometer data samples are collected every 10 minutes, therefore
+      to speed up the test process, change the data simple polling rates at every
+      1 minutes.  On Controller node modify /etc/ceilometer/pipeline.yaml to change
+      all value "600" to "60".
+
+    *** The following commands are for reseting Ceilometer database ***
+
+    $ /etc/init.d/ceilometer-agent-notification stop
+    $ /etc/init.d/ceilometer-agent-central stop
+    $ /etc/init.d/ceilometer-alarm-evaluator stop
+    $ /etc/init.d/ceilometer-alarm-notifier stop
+    $ /etc/init.d/ceilometer-api stop
+    $ /etc/init.d/ceilometer-collector stop
+    $ sudo -u postgres psql -c "DROP DATABASE ceilometer"
+    $ sudo -u postgres psql -c "CREATE DATABASE ceilometer"
+    $ ceilometer-dbsync
+    $ /etc/init.d/ceilometer-agent-central restart
+    $ /etc/init.d/ceilometer-agent-notification restart
+    $ /etc/init.d/ceilometer-alarm-evaluator restart
+    $ /etc/init.d/ceilometer-alarm-notifier restart
+    $ /etc/init.d/ceilometer-api restart
+    $ /etc/init.d/ceilometer-collector restart
+
+    $ On Compute node, modify /etc/ceilometer/pipeline.yaml to change all
+      value "600" to "60", and run:
+
+        /etc/init.d/ceilometer-agent-compute restart
+
+    $ heat stack-create -f /etc/heat/templates/autoscaling_example.template mystack
+    $ Keep running "heat stack-list" until seeing
++--------------------------------------+------------+-----------------+----------------------+
+| id                                   | stack_name | stack_status    | creation_time        |
++--------------------------------------+------------+-----------------+----------------------+
+| 1905a541-edfa-4a1f-b6f9-eacdf5f62d85 | mystack    | CREATE_COMPLETE | 2014-05-06T22:46:08Z |
++--------------------------------------+------------+-----------------+----------------------+
+
+    $ ceilometer alarm-list
++--------------------------------------+-------------------------------------+-------------------+---------+------------+---------------------------------+------------------+
+| Alarm ID                             | Name                                | State             | Enabled | Continuous | Alarm condition                 | Time constraints |
++--------------------------------------+-------------------------------------+-------------------+---------+------------+---------------------------------+------------------+
+| 14a1c510-667c-4717-a49d-eba375e48e01 | mystack-cpu_alarm_low-3jmjeyqrwd3k  | insufficient data | True    | False      | cpu_util < 45.0 during 1 x 120s | None             |
+| edcc3c0c-84b7-4694-8312-72677bc50efd | mystack-cpu_alarm_high-jiziioj5zt6r | insufficient data | True    | False      | cpu_util > 80.0 during 1 x 300s | None             |
++--------------------------------------+-------------------------------------+-------------------+---------+------------+---------------------------------+------------------+
+
+    $ nova list
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+| ID                                   | Name                                                          | Status | Task State | Power State | Networks |
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+| 49201b33-1cd9-4e2f-b182-224f29c2bb7c | mystack-server_group-etzglbdncptt-server_group-0-moxmbfm4pynk | ACTIVE | -          | Running     |          |
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+
+    $ Keep running "ceilometer alarm-list" until seeing
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| Alarm ID                             | Name                                | State | Enabled | Continuous | Alarm condition                 | Time constraints |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| 39a9cb57-46f0-4f8a-885d-9a645aa467b1 | mystack-cpu_alarm_low-jrjmwxbhzdd3  | alarm | True    | True       | cpu_util < 15.0 during 1 x 120s | None             |
+| 5dd5747e-a7a7-4ccd-994b-b0b8733728de | mystack-cpu_alarm_high-tpgsvsbcskjt | ok    | True    | True       | cpu_util > 80.0 during 1 x 180s | None             |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+
+    $ Wait for 5 minutes
+    $ ceilometer alarm-list
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| Alarm ID                             | Name                                | State | Enabled | Continuous | Alarm condition                 | Time constraints |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| 39a9cb57-46f0-4f8a-885d-9a645aa467b1 | mystack-cpu_alarm_low-jrjmwxbhzdd3  | alarm | True    | True       | cpu_util < 15.0 during 1 x 120s | None             |
+| 5dd5747e-a7a7-4ccd-994b-b0b8733728de | mystack-cpu_alarm_high-tpgsvsbcskjt | ok    | True    | True       | cpu_util > 80.0 during 1 x 180s | None             |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+
+    $ On Dashboard, log into 49201b33-1cd9-4e2f-b182-224f29c2bb7c VM console and run
+
+        while [ true ]; do echo "hello world"; done
+
+    $ Keep running "ceilometer alarm-list" until seeing
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| Alarm ID                             | Name                                | State | Enabled | Continuous | Alarm condition                 | Time constraints |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| 14a1c510-667c-4717-a49d-eba375e48e01 | mystack-cpu_alarm_low-3jmjeyqrwd3k  | ok    | True    | False      | cpu_util < 45.0 during 1 x 120s | None             |
+| edcc3c0c-84b7-4694-8312-72677bc50efd | mystack-cpu_alarm_high-jiziioj5zt6r | alarm | True    | False      | cpu_util > 80.0 during 1 x 300s | None             |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+
+    $ nova list
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+| ID                                   | Name                                                          | Status | Task State | Power State | Networks |
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+| 49201b33-1cd9-4e2f-b182-224f29c2bb7c | mystack-server_group-etzglbdncptt-server_group-0-moxmbfm4pynk | ACTIVE | -          | Running     |          |
+| a1a21353-3400-46be-b75c-8c6a0a74a1de | mystack-server_group-etzglbdncptt-server_group-1-wzspkkrb4qay | BUILD  | spawning   | NOSTATE     |          |
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+
+(Should see that now heat auto scales up by creating another VM)
+
+    $ nova list
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+| ID                                   | Name                                                          | Status | Task State | Power State | Networks |
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+| 49201b33-1cd9-4e2f-b182-224f29c2bb7c | mystack-server_group-etzglbdncptt-server_group-0-moxmbfm4pynk | ACTIVE | -          | Running     |          |
+| a1a21353-3400-46be-b75c-8c6a0a74a1de | mystack-server_group-etzglbdncptt-server_group-1-wzspkkrb4qay | ACTIVE | -          | Running     |          |
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+
+    $ Keep running "ceilometer alarm-list" until seeing
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| Alarm ID                             | Name                                | State | Enabled | Continuous | Alarm condition                 | Time constraints |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| 14a1c510-667c-4717-a49d-eba375e48e01 | mystack-cpu_alarm_low-3jmjeyqrwd3k  | ok    | True    | False      | cpu_util < 45.0 during 1 x 120s | None             |
+| edcc3c0c-84b7-4694-8312-72677bc50efd | mystack-cpu_alarm_high-jiziioj5zt6r | ok    | True    | False      | cpu_util > 80.0 during 1 x 300s | None             |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+
+(Both alarm should be in "ok" state as average cpu_util for 2 VMs should be around 50%
+which is in the range)
+
+    $ On Dashboard, log into the a1a21353-3400-46be-b75c-8c6a0a74a1de VM console and run
+
+        while [ true ]; do echo "hello world"; done
+
+    $ Keep running "ceilometer alarm-list" until seeing
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| Alarm ID                             | Name                                | State | Enabled | Continuous | Alarm condition                 | Time constraints |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| 14a1c510-667c-4717-a49d-eba375e48e01 | mystack-cpu_alarm_low-3jmjeyqrwd3k  | ok    | True    | False      | cpu_util < 45.0 during 1 x 120s | None             |
+| edcc3c0c-84b7-4694-8312-72677bc50efd | mystack-cpu_alarm_high-jiziioj5zt6r | alarm | True    | False      | cpu_util > 80.0 during 1 x 300s | None             |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+
+    $ nova list
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+| ID                                   | Name                                                          | Status | Task State | Power State | Networks |
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+| 49201b33-1cd9-4e2f-b182-224f29c2bb7c | mystack-server_group-etzglbdncptt-server_group-0-moxmbfm4pynk | ACTIVE | -          | Running     |          |
+| a1a21353-3400-46be-b75c-8c6a0a74a1de | mystack-server_group-etzglbdncptt-server_group-1-wzspkkrb4qay | ACTIVE | -          | Running     |          |
+| 88e88660-acde-4998-a2e3-312efbc72447 | mystack-server_group-etzglbdncptt-server_group-2-jaotqnr5x7xb | BUILD  | spawning   | NOSTATE     |          |
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+
+(Should see that now heat auto scales up by creating another VM)
+
+    $ nova list
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+| ID                                   | Name                                                          | Status | Task State | Power State | Networks |
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+| 49201b33-1cd9-4e2f-b182-224f29c2bb7c | mystack-server_group-etzglbdncptt-server_group-0-moxmbfm4pynk | ACTIVE | -          | Running     |          |
+| a1a21353-3400-46be-b75c-8c6a0a74a1de | mystack-server_group-etzglbdncptt-server_group-1-wzspkkrb4qay | ACTIVE | -          | Running     |          |
+| 88e88660-acde-4998-a2e3-312efbc72447 | mystack-server_group-etzglbdncptt-server_group-2-jaotqnr5x7xb | ACTIVE | -          | Running     |          |
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+
+    $ Keep running "ceilometer alarm-list" until seeing
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| Alarm ID                             | Name                                | State | Enabled | Continuous | Alarm condition                 | Time constraints |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| 14a1c510-667c-4717-a49d-eba375e48e01 | mystack-cpu_alarm_low-3jmjeyqrwd3k  | ok    | True    | False      | cpu_util < 45.0 during 1 x 120s | None             |
+| edcc3c0c-84b7-4694-8312-72677bc50efd | mystack-cpu_alarm_high-jiziioj5zt6r | ok    | True    | False      | cpu_util > 80.0 during 1 x 300s | None             |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+
+    $ Wait for 5 minutes
+    $ ceilometer alarm-list
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| Alarm ID                             | Name                                | State | Enabled | Continuous | Alarm condition                 | Time constraints |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| 14a1c510-667c-4717-a49d-eba375e48e01 | mystack-cpu_alarm_low-3jmjeyqrwd3k  | ok    | True    | False      | cpu_util < 45.0 during 1 x 120s | None             |
+| edcc3c0c-84b7-4694-8312-72677bc50efd | mystack-cpu_alarm_high-jiziioj5zt6r | ok    | True    | False      | cpu_util > 80.0 during 1 x 300s | None             |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+
+    $ On Dashboard, log into the a1a21353-3400-46be-b75c-8c6a0a74a1de VM console and
+      stop the while loop
+
+    $ Keep running "ceilometer alarm-list" until seeing
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| Alarm ID                             | Name                                | State | Enabled | Continuous | Alarm condition                 | Time constraints |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| 14a1c510-667c-4717-a49d-eba375e48e01 | mystack-cpu_alarm_low-3jmjeyqrwd3k  | alarm | True    | False      | cpu_util < 45.0 during 1 x 120s | None             |
+| edcc3c0c-84b7-4694-8312-72677bc50efd | mystack-cpu_alarm_high-jiziioj5zt6r | ok    | True    | False      | cpu_util > 80.0 during 1 x 300s | None             |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+
+    $ nova list
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+| ID                                   | Name                                                          | Status | Task State | Power State | Networks |
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+| 49201b33-1cd9-4e2f-b182-224f29c2bb7c | mystack-server_group-etzglbdncptt-server_group-0-moxmbfm4pynk | ACTIVE | -          | Running     |          |
+| a1a21353-3400-46be-b75c-8c6a0a74a1de | mystack-server_group-etzglbdncptt-server_group-1-wzspkkrb4qay | ACTIVE | -          | Running     |          |
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+
+(Heat scales down the VMs by one as cpu_alarm_low is triggered)
+
+    $ Wait for 5 minutes
+    $ ceilometer alarm-list
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| Alarm ID                             | Name                                | State | Enabled | Continuous | Alarm condition                 | Time constraints |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| 14a1c510-667c-4717-a49d-eba375e48e01 | mystack-cpu_alarm_low-3jmjeyqrwd3k  | ok    | True    | False      | cpu_util < 45.0 during 1 x 120s | None             |
+| edcc3c0c-84b7-4694-8312-72677bc50efd | mystack-cpu_alarm_high-jiziioj5zt6r | ok    | True    | False      | cpu_util > 80.0 during 1 x 300s | None             |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+
+    $ On Dashboard, log into the 49201b33-1cd9-4e2f-b182-224f29c2bb7c VM console and
+      stop the while loop
+
+    $ Keep running "ceilometer alarm-list" until seeing
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| Alarm ID                             | Name                                | State | Enabled | Continuous | Alarm condition                 | Time constraints |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| 14a1c510-667c-4717-a49d-eba375e48e01 | mystack-cpu_alarm_low-3jmjeyqrwd3k  | alarm | True    | False      | cpu_util < 45.0 during 1 x 120s | None             |
+| edcc3c0c-84b7-4694-8312-72677bc50efd | mystack-cpu_alarm_high-jiziioj5zt6r | ok    | True    | False      | cpu_util > 80.0 during 1 x 300s | None             |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+
+    $ nova list
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+| ID                                   | Name                                                          | Status | Task State | Power State | Networks |
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+| 49201b33-1cd9-4e2f-b182-224f29c2bb7c | mystack-server_group-etzglbdncptt-server_group-0-moxmbfm4pynk | ACTIVE | -          | Running     |          |
++--------------------------------------+---------------------------------------------------------------+--------+------------+-------------+----------+
+
+(Heat scales down the VMs by one as cpu_alarm_low is triggered)
+
+    $ Wait for 5 minutes
+    $ ceilometer alarm-list
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| Alarm ID                             | Name                                | State | Enabled | Continuous | Alarm condition                 | Time constraints |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+| 14a1c510-667c-4717-a49d-eba375e48e01 | mystack-cpu_alarm_low-3jmjeyqrwd3k  | alarm | True    | False      | cpu_util < 45.0 during 1 x 120s | None             |
+| edcc3c0c-84b7-4694-8312-72677bc50efd | mystack-cpu_alarm_high-jiziioj5zt6r | ok    | True    | False      | cpu_util > 80.0 during 1 x 300s | None             |
++--------------------------------------+-------------------------------------+-------+---------+------------+---------------------------------+------------------+
+
+    $ heat stack-delete 1905a541-edfa-4a1f-b6f9-eacdf5f62d85
+    $ heat stack-list
++----+------------+--------------+---------------+
+| id | stack_name | stack_status | creation_time |
++----+------------+--------------+---------------+
++----+------------+--------------+---------------+
+
+    $ nova list
++----+------+--------+------------+-------------+----------+
+| ID | Name | Status | Task State | Power State | Networks |
++----+------+--------+------------+-------------+----------+
++----+------+--------+------------+-------------+----------+
+
+    $ ceilometer alarm-list
++----------+------+-------+---------+------------+-----------------+------------------+
+| Alarm ID | Name | State | Enabled | Continuous | Alarm condition | Time constraints |
++----------+------+-------+---------+------------+-----------------+------------------+
++----------+------+-------+---------+------------+-----------------+------------------+
+
+
+Heat Built-In Unit Tests
+=========================
+
+This section describes how to run Heat and Heat client built-in unit
+tests which are located at:
+
+    /usr/lib64/python2.7/site-packages/heat/tests
+    /usr/lib64/python2.7/site-packages/heatclient/tests
+
+To run heat built-in unit test with nosetests:
+
+    $ cd /usr/lib64/python2.7/site-packages/heat
+    $ nosetests -v tests
+
+----------------------------------------------------------------------
+Ran 1550 tests in 45.770s
+
+OK
+
+To run heatclient built-in unit test with nosetests:
+
+    $ cd /usr/lib64/python2.7/site-packages/heatclient/tests
+    $ python -v -m subunit.run discover . | subunit2pyunit
+
+----------------------------------------------------------------------
+Ran 272 tests in 3.368s
+
+OK
+
+Please note that, Python testrunner subunit.run is used instead of
+nosetests as nosetests is not compatible with testscenarios test
+framework used by some of the heatclient unit tests.

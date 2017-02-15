@@ -1,0 +1,35 @@
+From 249139daafd4ac4cdc60a70d033ee7026d3354e7 Mon Sep 17 00:00:00 2001
+From: Bruce Ashfield <bruce.ashfield@windriver.com>
+Date: Sun, 19 Jan 2014 00:25:48 -0500
+Subject: [PATCH] sqlalchemy: fix ceilometer resource query
+
+Implement the abandoned ceilometer fix from:
+
+ https://review.openstack.org/#/c/59204/ [Fix for get_statistics with postgresql]
+
+Without this fix, the ceilometer resource tab in horizon returns an error due
+to badly formed SQL and a database backend error.
+
+Signed-off-by: Bruce Ashfield <bruce.ashfield@windriver.com>
+---
+ ceilometer/storage/impl_sqlalchemy.py |    4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/ceilometer/storage/impl_sqlalchemy.py b/ceilometer/storage/impl_sqlalchemy.py
+index 8d321eaaeffe..f1c99a72ded9 100644
+--- a/ceilometer/storage/impl_sqlalchemy.py
++++ b/ceilometer/storage/impl_sqlalchemy.py
+@@ -577,7 +577,9 @@ class Connection(base.Connection):
+             group_attributes = [getattr(Meter, g) for g in groupby]
+             select.extend(group_attributes)
+ 
+-        query = session.query(*select)
++        #Group by counter_unit for postgresql queries
++        #In mysql this doesn't change anything because one meter has one unit
++        query = session.query(*select).group_by(Meter.counter_unit)
+ 
+         if groupby:
+             query = query.group_by(*group_attributes)
+-- 
+1.7.10.4
+

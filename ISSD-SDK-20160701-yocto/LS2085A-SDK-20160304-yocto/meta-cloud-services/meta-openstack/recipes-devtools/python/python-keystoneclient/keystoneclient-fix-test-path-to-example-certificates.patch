@@ -1,0 +1,31 @@
+From fae14f85d43da3842b2a065baf0442d61a573598 Mon Sep 17 00:00:00 2001
+From: Keith Holman <Keith.Holman@windriver.com>
+Date: Fri, 13 Jun 2014 17:08:03 -0400
+Subject: [PATCH] keystoneclient: fix test path to example certificates
+
+The tests included with keystoneclient expect them to be ran from the
+source tree.  This fix changes base path of the system to where they
+are actually deployed on the system.  This fix is required for some
+tests to work properly.
+
+Signed-off-by: Keith Holman <Keith.Holman@windriver.com>
+---
+ keystoneclient/tests/client_fixtures.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/keystoneclient/tests/client_fixtures.py b/keystoneclient/tests/client_fixtures.py
+index 1743162..6bfcb93 100644
+--- a/keystoneclient/tests/client_fixtures.py
++++ b/keystoneclient/tests/client_fixtures.py
+@@ -25,7 +25,7 @@ from keystoneclient import utils
+ 
+ 
+ TESTDIR = os.path.dirname(os.path.abspath(__file__))
+-ROOTDIR = os.path.normpath(os.path.join(TESTDIR, '..', '..'))
++ROOTDIR = os.path.normpath(os.path.join(TESTDIR, '..'))
+ CERTDIR = os.path.join(ROOTDIR, 'examples', 'pki', 'certs')
+ CMSDIR = os.path.join(ROOTDIR, 'examples', 'pki', 'cms')
+ KEYDIR = os.path.join(ROOTDIR, 'examples', 'pki', 'private')
+-- 
+1.9.3
+

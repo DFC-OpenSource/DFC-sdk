@@ -1,0 +1,48 @@
+From d2848980dd76673d626b81acd23989bbcceb4fd4 Mon Sep 17 00:00:00 2001
+From: Andrew Pinski <apinski@cavium.com>
+Date: Wed, 3 Sep 2014 14:19:07 -0700
+Subject: [PATCH 13/25] ARM64:ILP32: Use the non compat HWCAP for ILP32
+
+Signed-off-by: Andrew Pinski <apinski@cavium.com>
+---
+ arch/arm64/include/asm/compat.h | 10 ++++++++++
+ arch/arm64/include/asm/hwcap.h  |  2 --
+ 2 files changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm64/include/asm/compat.h b/arch/arm64/include/asm/compat.h
+index 074bcc3..0f4ecfe 100644
+--- a/arch/arm64/include/asm/compat.h
++++ b/arch/arm64/include/asm/compat.h
+@@ -296,6 +296,16 @@ struct compat_shmid64_ds {
+ 	compat_ulong_t __unused5;
+ };
+ 
++#define COMPAT_ELF_HWCAP	\
++	(is_a32_compat_task()	\
++	  ? compat_elf_hwcap	\
++	  : elf_hwcap)
++
++#define COMPAT_ELF_HWCAP2	\
++	(is_a32_compat_task()	\
++	  ? compat_elf_hwcap2	\
++	  : 0)
++
+ static inline int is_compat_task(void)
+ {
+ 	return test_thread_flag(TIF_32BIT);
+diff --git a/arch/arm64/include/asm/hwcap.h b/arch/arm64/include/asm/hwcap.h
+index 024c461..31e7e02 100644
+--- a/arch/arm64/include/asm/hwcap.h
++++ b/arch/arm64/include/asm/hwcap.h
+@@ -46,8 +46,6 @@
+ #define ELF_HWCAP		(elf_hwcap)
+ 
+ #ifdef CONFIG_COMPAT
+-#define COMPAT_ELF_HWCAP	(compat_elf_hwcap)
+-#define COMPAT_ELF_HWCAP2	(compat_elf_hwcap2)
+ extern unsigned int compat_elf_hwcap, compat_elf_hwcap2;
+ #endif
+ 
+-- 
+1.9.3
+

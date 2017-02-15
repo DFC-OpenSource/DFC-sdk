@@ -1,0 +1,107 @@
+image client not specify version
+
+Currenlty glance keystone endpoints URLs include
+"v2/" at the end (e.g. http://<glance server ip>:9292:v2/).
+This means glance should only be talked to using v2.
+
+For tempest image testcases, image_client.py gets URLs
+from keystones and appends additional version into
+these URL strings (e.g. htt://<glance server ip>:9292:v2/v2/images)
+which causes glance not to understand the command and return error:
+
+NotFound: Object not found
+Details: 404 Not Found
+The resource could not be found.
+
+In our case, we use the "v2" from URLs.
+
+Signed-off-by: Vu Tran <vu.tran@windriver.com>
+
+diff --git a/tempest/api/image/base.py b/tempest/api/image/base.py
+index ab0cb00..b5568b9 100644
+--- a/tempest/api/image/base.py
++++ b/tempest/api/image/base.py
+@@ -92,6 +92,10 @@ class BaseV2ImageTest(BaseImageTest):
+     def setUpClass(cls):
+         super(BaseV2ImageTest, cls).setUpClass()
+         cls.client = cls.os.image_client_v2
++        # Currently Glance endpoint url from keystone
++        # does contain "v2" so in test we do not pass
++        # in version.
++        cls.client.desired_version = ''
+         if not cls.config.image_feature_enabled.api_v2:
+             msg = "Glance API v2 not supported"
+             raise cls.skipException(msg)
+diff --git a/tempest/services/image/v2/json/image_client.py b/tempest/services/image/v2/json/image_client.py
+index f0531ec..febe0c2 100644
+--- a/tempest/services/image/v2/json/image_client.py
++++ b/tempest/services/image/v2/json/image_client.py
+@@ -32,6 +32,7 @@ class ImageClientV2JSON(rest_client.RestClient):
+                                                 auth_url, tenant_name)
+         self.service = self.config.images.catalog_type
+         self.http = self._get_http()
++        self.desired_version = 'v2/'
+ 
+     def _get_http(self):
+         token, endpoint = self.keystone_auth(self.user, self.password,
+@@ -42,13 +43,13 @@ class ImageClientV2JSON(rest_client.RestClient):
+                                       insecure=dscv)
+ 
+     def get_images_schema(self):
+-        url = 'v2/schemas/images'
++        url = self.desired_version + 'schemas/images'
+         resp, body = self.get(url)
+         body = json.loads(body)
+         return resp, body
+ 
+     def get_image_schema(self):
+-        url = 'v2/schemas/image'
++        url = self.desired_version + 'schemas/image'
+         resp, body = self.get(url)
+         body = json.loads(body)
+         return resp, body
+@@ -81,16 +82,16 @@ class ImageClientV2JSON(rest_client.RestClient):
+         data = json.dumps(params)
+         self._validate_schema(data)
+ 
+-        resp, body = self.post('v2/images', data, self.headers)
++        resp, body = self.post(self.desired_version + 'images', data, self.headers)
+         body = json.loads(body)
+         return resp, body
+ 
+     def delete_image(self, image_id):
+-        url = 'v2/images/%s' % image_id
++        url = self.desired_version + 'images/%s' % image_id
+         self.delete(url)
+ 
+     def image_list(self, params=None):
+-        url = 'v2/images'
++        url = self.desired_version + 'images'
+ 
+         if params:
+             url += '?%s' % urllib.urlencode(params)
+@@ -101,7 +102,7 @@ class ImageClientV2JSON(rest_client.RestClient):
+         return resp, body['images']
+ 
+     def get_image_metadata(self, image_id):
+-        url = 'v2/images/%s' % image_id
++        url = self.desired_version + 'images/%s' % image_id
+         resp, body = self.get(url)
+         body = json.loads(body)
+         return resp, body
+@@ -114,13 +115,13 @@ class ImageClientV2JSON(rest_client.RestClient):
+         return False
+ 
+     def store_image(self, image_id, data):
+-        url = 'v2/images/%s/file' % image_id
++        url = self.desired_version + 'images/%s/file' % image_id
+         headers = {'Content-Type': 'application/octet-stream'}
+         resp, body = self.http.raw_request('PUT', url, headers=headers,
+                                            body=data)
+         return resp, body
+ 
+     def get_image_file(self, image_id):
+-        url = 'v2/images/%s/file' % image_id
++        url = self.desired_version + 'images/%s/file' % image_id
+         resp, body = self.get(url)
+         return resp, body

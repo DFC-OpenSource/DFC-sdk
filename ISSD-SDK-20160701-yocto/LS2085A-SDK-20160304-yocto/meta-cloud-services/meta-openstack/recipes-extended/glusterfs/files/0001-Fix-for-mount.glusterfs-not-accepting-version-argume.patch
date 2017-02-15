@@ -1,0 +1,33 @@
+From 960a101ab795fed1b7505ed9db61769cbdb9450e Mon Sep 17 00:00:00 2001
+From: Sebastian Lenartowicz <Sebastian.Lenartowicz@windriver.com>
+Date: Wed, 4 Dec 2013 15:16:02 -0500
+Subject: [PATCH 1/1] Fix for mount.glusterfs not accepting --version argument
+
+The mount.glusterfs shell script serves as a convenient "gatekeeper"
+for the glusterfs program itself, and performs a few setup tasks,
+depending on the options it's given. However, an overzealous check
+for the number of arguments (any number of arguments less than 2)
+was preventing the --version and --help arguments from being usable
+on their own. This patch solves that by dropping the check (the
+glusterfs software itself can throw out commands with too few
+arguments, which makes the check redundant in any event).
+---
+ xlators/mount/fuse/utils/mount.glusterfs.in |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/xlators/mount/fuse/utils/mount.glusterfs.in b/xlators/mount/fuse/utils/mount.glusterfs.in
+index 2a8183c..ea18efb 100755
+--- a/xlators/mount/fuse/utils/mount.glusterfs.in
++++ b/xlators/mount/fuse/utils/mount.glusterfs.in
+@@ -395,7 +395,7 @@ main ()
+             pos_args=$((pos_args+1))
+         fi
+     done
+-    if [ $in_opt = "yes" -o $pos_args -lt 2 ]; then
++    if [ $in_opt = "yes" ]; then
+         usage
+         exit 1
+     fi
+-- 
+1.7.9.7
+

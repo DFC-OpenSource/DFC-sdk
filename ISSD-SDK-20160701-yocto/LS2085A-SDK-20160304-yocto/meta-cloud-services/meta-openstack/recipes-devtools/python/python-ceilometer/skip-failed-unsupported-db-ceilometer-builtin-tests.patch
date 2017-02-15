@@ -1,0 +1,51 @@
+skip failed unsupported db ceilometer builtin tests
+
+Some ceilometer builtin testcases failed because they try to
+test ceilometer functionalities on top of unsupported database,
+e.g. mongodb or db2.  These testcases should be skipped instead
+of letting them fail as the prerequisite is not satisfied.
+
+Signed-off-by: Vu Tran <vu.tran@windriver.com>
+
+diff --git a/ceilometer/tests/db.py b/ceilometer/tests/db.py
+index 293e022..d64c61c 100644
+--- a/ceilometer/tests/db.py
++++ b/ceilometer/tests/db.py
+@@ -35,7 +35,7 @@
+     def setUp(self):
+         super(TestBase, self).setUp()
+ 
+-        if self.database_connection is None:
++        if self.database_connection is None or str(self.database_connection) == "":
+             self.skipTest("No connection URL set")
+ 
+         self.CONF = self.useFixture(config.Config()).conf
+@@ -75,13 +75,12 @@ class MongoDBFakeConnectionUrl(object):
+ 
+     def __init__(self):
+         self.url = os.environ.get('CEILOMETER_TEST_MONGODB_URL')
+-        if not self.url:
+-            raise RuntimeError(
+-                "No MongoDB test URL set,"
+-                "export CEILOMETER_TEST_MONGODB_URL environment variable")
+ 
+     def __str__(self):
+-        return '%(url)s_%(db)s' % dict(url=self.url, db=uuid.uuid4().hex)
++        if not self.url:
++            return ""
++        else:
++            return '%(url)s_%(db)s' % dict(url=self.url, db=uuid.uuid4().hex)
+ 
+ 
+ class DB2FakeConnectionUrl(MongoDBFakeConnectionUrl):
+@@ -89,9 +88,7 @@ class DB2FakeConnectionUrl(MongoDBFakeConnectionUrl):
+         self.url = (os.environ.get('CEILOMETER_TEST_DB2_URL') or
+                     os.environ.get('CEILOMETER_TEST_MONGODB_URL'))
+         if not self.url:
+-            raise RuntimeError(
+-                "No DB2 test URL set, "
+-                "export CEILOMETER_TEST_DB2_URL environment variable")
++            pass
+         else:
+             # This is to make sure that the db2 driver is used when
+             # CEILOMETER_TEST_DB2_URL was not set

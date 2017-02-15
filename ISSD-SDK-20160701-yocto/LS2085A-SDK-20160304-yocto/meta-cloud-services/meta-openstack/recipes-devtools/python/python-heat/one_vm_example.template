@@ -1,0 +1,63 @@
+heat_template_version: 2013-05-23
+description: Template to deploy one VM
+parameters:
+  vm_type:
+    type: string
+    description: Type of the instance to be created.
+    default: m1.tiny
+    constraints:
+      - allowed_values: [m1.tiny, m1.small, m1.medium, m1.large]
+        description:
+          Value must be one of 'm1.tiny', 'm1.small', 'm1.medium' or 'm1.large'.
+  image_id:
+    type: string
+    description: ID of the image to use for VM to be created.
+    default: myfirstimage
+  vol_1_size:
+    type: number
+    description: Size of the volume to be created.
+    default: 1
+    constraints:
+      - range: { min: 1, max: 1024 }
+        description: must be between 1 and 1024 Gb.
+  vol_1_type:
+    type: string
+    description: Cinder backend type
+    default: lvm_iscsi
+    constraints:
+      - allowed_values: [lvm_iscsi, nfs, glusterfs, cephrbd]
+        description:
+          Value must be one of 'lvm_iscsi', 'nfs', 'glusterfs' or 'cephrbd'.
+  vol_2_id:
+    type: string
+    description: Cinder existing volume id
+resources:
+  vm_1:
+    type: OS::Nova::Server
+    properties:
+      image: { get_param: image_id }
+      flavor: { get_param: vm_type }
+  vol_1:
+    type: OS::Cinder::Volume
+    properties:
+      size: { get_param: vol_1_size }
+      volume_type: { get_param: vol_1_type }
+  vol_1_attachment:
+    type: OS::Cinder::VolumeAttachment
+    properties:
+      volume_id: { get_resource: vol_1 }
+      instance_uuid: { get_resource: vm_1 }
+      mountpoint: /dev/vdb
+  vol_2_attachment:
+    type: OS::Cinder::VolumeAttachment
+    properties:
+      volume_id: { get_param: vol_2_id }
+      instance_uuid: { get_resource: vm_1 }
+      mountpoint: /dev/vdc
+outputs:
+  vm_1_instance_ip:
+    description: Public IP address of VM 1.
+    value: { get_attr: [vm_1, first_address] }
+  vm_1_show:
+    description: Show details of VM 1.
+    value: { get_attr: [vm_1, show] }

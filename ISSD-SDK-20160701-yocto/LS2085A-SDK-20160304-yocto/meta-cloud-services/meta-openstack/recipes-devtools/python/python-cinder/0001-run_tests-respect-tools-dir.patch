@@ -1,0 +1,29 @@
+From cecd4285356bdfdb36161d24b9a3a47942643077 Mon Sep 17 00:00:00 2001
+From: Bruce Ashfield <bruce.ashfield@windriver.com>
+Date: Wed, 11 Dec 2013 14:25:49 -0500
+Subject: [PATCH] run_tests: respect --tools-dir
+
+Signed-off-by: Bruce Ashfield <bruce.ashfield@windriver.com>
+---
+ run_tests.sh |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/run_tests.sh b/run_tests.sh
+index 726ff438a077..f4f4d48c8808 100755
+--- a/run_tests.sh
++++ b/run_tests.sh
+@@ -146,9 +146,9 @@ function run_tests {
+   then
+     # subunit-2to1 is present, testr subunit stream should be in version 2
+     # format. Convert to version one before colorizing.
+-    bash -c "${wrapper} $TESTRTESTS | ${wrapper} subunit-2to1 | ${wrapper} tools/colorizer.py"
++    bash -c "${wrapper} $TESTRTESTS | ${wrapper} subunit-2to1 | ${wrapper} $tool_path/tools/colorizer.py"
+   else
+-    bash -c "${wrapper} $TESTRTESTS | ${wrapper} tools/colorizer.py"
++    bash -c "${wrapper} $TESTRTESTS | ${wrapper} $tool_path/tools/colorizer.py"
+   fi
+   RESULT=$?
+   set -e
+-- 
+1.7.10.4
+

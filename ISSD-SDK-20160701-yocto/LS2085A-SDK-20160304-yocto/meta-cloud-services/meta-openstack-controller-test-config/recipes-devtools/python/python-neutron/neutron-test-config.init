@@ -1,0 +1,142 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:
+# Required-Start: $remote_fs $network $syslog
+# Required-Stop: $remote_fs $syslog
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: Neutron Test Config
+# Description: OpenStack Neutron Test Config
+### END INIT INFO
+
+
+TEMPEST_CONF_FILE=/etc/tempest/tempest.conf
+OVS_NEUTRON_PLUGIN=/etc/neutron/plugins/openvswitch/ovs_neutron_plugin.ini
+temp_file="/tmp/do_note_delete_me.temp"
+temp_file_1="/tmp/do_note_delete_me_1.temp"
+
+
+function get_field() {
+    while read data; do
+        if [ "$1" -lt 0 ]; then
+            field="(\$(NF$1))"
+        else
+            field="\$$(($1 + 1))"
+        fi
+        echo "$data" | awk -F'[ \t]*\\|[ \t]*' "{print $field}"
+    done
+}
+
+function setup_default_flat_net() {
+    local tempest_net_name="TEMPEST_NET"
+    local eth_dev="%NEUTRON_CONF_EXT_ETH_IF%"
+    local ip="%CONTROLLER_IP%"
+    local ip_subnet="`echo $ip | cut -d '.' -f 1`.`echo $ip | cut -d '.' -f 2`.`echo $ip | cut -d '.' -f 3`"
+    if [ -z "$gate_way" ]; then
+        local gate_way="${ip_subnet}.1"
+    fi
+
+    sed -i "s/^# Example: network_vlan_ranges = physnet1:1000:2999/network_vlan_ranges = ph-eth0:1:1/" $OVS_NEUTRON_PLUGIN
+    sed -i "s/^network_vlan_ranges = .*/network_vlan_ranges = ph-eth0:1:1/" $OVS_NEUTRON_PLUGIN
+    sed -i "s/^# Example: bridge_mappings = physnet1:br-eth1/bridge_mappings = ph-eth0:br-eth0/" $OVS_NEUTRON_PLUGIN
+    sed -i "s/^bridge_mappings = .*/bridge_mappings = ph-eth0:br-eth0/" $OVS_NEUTRON_PLUGIN
+    sed -i "s/^local_ip = .*/local_ip = ${ip}/" $OVS_NEUTRON_PLUGIN
+
+    # Setup host OVS
+    ovs-vsctl add-br br-${eth_dev}
+    ovs-vsctl add-port br-${eth_dev} ${eth_dev}
+    ifconfig ${eth_dev} 0.0.0.0
+    ifconfig br-${eth_dev} ${ip}/16
+    route add default gw $gate_way
+
+    /etc/init.d/neutron-openvswitch-agent stop
+    /etc/init.d/neutron-dhcp-agent stop
+    /etc/init.d/neutron-server reload
+    /etc/init.d/neutron-dhcp-agent start
+    /etc/init.d/neutron-openvswitch-agent start
+    sleep 5
+
+    EXTERNAL_NET_ID=`neutron net-create ${tempest_net_name} --provider:physical_network=ph-eth0 --provider:network_type=flat --router:external=True | grep " id " | get_field  2`
+    neutron subnet-create ${tempest_net_name} ${ip_subnet}.0/24 \
+            --name ${tempest_net_name}_SUBNET --no-gateway \
+            --host-route destination=0.0.0.0/0,nexthop=$gate_way
+    EXT_TO_INT_ROUTER_ID=`neutron router-create ext-to-int | grep " id " | get_field 2`
+    neutron router-gateway-set $EXT_TO_INT_ROUTER_ID $EXTERNAL_NET_ID
+}
+
+start()
+{
+    if [ -e $TEMPEST_CONF_FILE ]; then
+        sleep 5
+        source /etc/nova/openrc
+        neutron net-list > $temp_file 2>&1
+        if [ "$?" != "0" ]; then
+            echo "Neutron service is not running"
+            exit 1
+        fi
+        shared_net_found=0
+        while read line; do
+            net_id=`echo $line | get_field 1`
+            neutron net-show $net_id > $temp_file_1 2>&1
+            if [ "$?" == "0" ]; then
+                is_external=`grep -F '| router:external' $temp_file_1 | get_field 2`
+                is_shared=`grep -F '| shared' $temp_file_1 | get_field 2`
+                if [ "$is_external" == "True" ] && [ "$is_shared" == "False" ] ; then
+                    shared_net_found=1
+                    break
+                fi
+            fi
+        done < $temp_file
+
+        if [ "$shared_net_found" == "0" ]; then
+            echo "Cannot find shared network, create default one"
+            setup_default_flat_net
+        fi
+
+        neutron net-list > $temp_file 2>&1
+        while read line; do
+            net_id=`echo $line | get_field 1`
+            neutron net-show $net_id > $temp_file_1 2>&1
+            if [ "$?" == "0" ]; then
+                is_external=`grep -F '| router:external' $temp_file_1 | get_field 2`
+                is_shared=`grep -F '| shared' $temp_file_1 | get_field 2`
+                shared_net_name=`grep -F '| name' $temp_file_1 | get_field 2`
+                if [ "$is_external" == "True" ] && [ "$is_shared" == "False" ] ; then
+                    sed -i "s/^public_network_id = .*/public_network_id = ${net_id}/" $TEMPEST_CONF_FILE
+                    sed -i "s/^fixed_network_name = .*/fixed_network_name = ${shared_net_name}/" $TEMPEST_CONF_FILE
+                    break
+                fi
+            fi
+        done < $temp_file
+
+        neutron router-list > $temp_file 2>&1
+        while read line; do
+            router_id=`echo $line | get_field 1`
+            neutron router-show $router_id > $temp_file_1 2>&1
+            res=`grep -F "$net_id" $temp_file_1`
+            if [ ! -z "$res" ]; then
+                sed -i "s/^public_router_id = .*/public_router_id = ${router_id}/" $TEMPEST_CONF_FILE
+                break
+            fi
+        done < $temp_file
+
+        rm -f $temp_file > /dev/null 2>&1
+        rm -f $temp_file_1 > /dev/null 2>&1
+    fi
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop|force-reload|restart|reload|status)
+        echo "WARNING: command $1 is not supported"
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|force-reload|restart|reload|status}"
+        exit 1
+        ;;
+esac
+
+exit 0

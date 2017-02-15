@@ -1,0 +1,622 @@
+/*
+ * This DPL showcases one Linux configuration for SerDes 0x2a_49, maximizing
+ * resources allotted to the Ethernet driver. This is by no means a necessity,
+ * the DPAA2 Linux Eth driver can work with fewer resources, albeit with lesser
+ * performance. This DPL is therefore only an example.
+ *
+ * Copyright 2014-2015 Freescale Semiconductor, Inc.
+ */
+
+/dts-v1/;
+/ {
+	/*****************************************************************
+         * Containers
+         *****************************************************************/
+	containers {
+		dprc@1 {
+			compatible = "fsl,dprc";
+			parent = "none";
+			options = "DPRC_CFG_OPT_SPAWN_ALLOWED" , "DPRC_CFG_OPT_ALLOC_ALLOWED", "DPRC_CFG_OPT_IRQ_CFG_ALLOWED";
+
+			objects {
+				/* ------------- DPMACs --------------*/
+				/* For SerDes 0x2a_49, 8 DPMACs are mapped
+				 * on the 8 XFI ports and 4 DPMACs
+				 * are mapped on the 4 SGMII ports of the PCIe
+				 * Slot 4 riser card.
+				 */
+				obj@101 {
+					obj_name = "dpmac@1";
+				};
+				obj@102 {
+					obj_name = "dpmac@2";
+				};
+				obj@103 {
+					obj_name = "dpmac@3";
+				};
+				obj@104 {
+					obj_name = "dpmac@4";
+				};
+
+				/* ------------ DPNIs --------------*/
+				obj@201 {
+					obj_name = "dpni@1";
+				};
+				obj@202 {
+					obj_name = "dpni@2";
+				};
+				obj@203 {
+					obj_name = "dpni@3";
+				};
+				obj@204 {
+					obj_name = "dpni@4";
+				};
+
+				/* ------------ DPBPs --------------*/
+				/* Each DPNI uses one DPBP */
+				obj@301 {
+					obj_name="dpbp@1";
+				};
+				obj@302 {
+					obj_name="dpbp@2";
+				};
+				obj@303 {
+					obj_name="dpbp@3";
+				};
+				obj@304 {
+					obj_name="dpbp@4";
+				};
+
+				/* ------------ DPMCPs --------------*/
+				/* Ethernet DPMCPs:
+				*  One for every DPNI, one for every DPMAC, then
+				*  one more for DPIO.
+				*
+				*  Next: DPRC and restool, VFIO and possibly
+				*  others from the kernel have DPMCP requirements.
+				*  We'll just add a slack of 10 MCPs.
+				*/
+				obj@701 {
+					obj_name="dpmcp@1";
+				};
+				obj@702 {
+					obj_name="dpmcp@2";
+				};
+				obj@703 {
+					obj_name="dpmcp@3";
+				};
+				obj@704 {
+					obj_name="dpmcp@4";
+				};
+				obj@705 {
+					obj_name="dpmcp@5";
+				};
+				obj@706 {
+					obj_name="dpmcp@6";
+				};
+				obj@707 {
+					obj_name="dpmcp@7";
+				};
+				obj@708 {
+					obj_name="dpmcp@8";
+				};
+				obj@709 {
+					obj_name="dpmcp@9";
+				};
+				obj@710 {
+					obj_name="dpmcp@10";
+				};
+				obj@711 {
+					obj_name="dpmcp@11";
+				};
+				obj@712 {
+					obj_name="dpmcp@12";
+				};
+				obj@713 {
+					obj_name="dpmcp@13";
+				};
+				obj@714 {
+					obj_name="dpmcp@14";
+				};
+				obj@715 {
+					obj_name="dpmcp@15";
+				};
+				obj@716 {
+					obj_name="dpmcp@16";
+				};
+				obj@717 {
+					obj_name="dpmcp@17";
+				};
+
+				/* ------------ DPIOs --------------*/
+				/* One DPIO for each online CPU. This is a 
+				 * maximal configuration.
+				 */
+				obj@401 {
+					obj_name = "dpio@1";
+				};
+				obj@402 {
+					obj_name = "dpio@2";
+				};
+				obj@403 {
+					obj_name = "dpio@3";
+				};
+				obj@404 {
+					obj_name = "dpio@4";
+				};
+				obj@405 {
+					obj_name = "dpio@5";
+				};
+				obj@406 {
+					obj_name = "dpio@6";
+				};
+				obj@407 {
+					obj_name = "dpio@7";
+				};
+				obj@408 {
+					obj_name = "dpio@8";
+				};
+
+				/* ------------ DPCONs --------------*/
+				/* Used by DPNIs in Linux for CDAN-based dequeueing.
+				 * Ideally, there should be one DPCON per {DPNIxDPIO}
+				 * combination.
+				 */
+				obj@501 {
+					obj_name="dpcon@1";
+				};
+				obj@502 {
+					obj_name="dpcon@2";
+				};
+				obj@503 {
+					obj_name="dpcon@3";
+				};
+				obj@504 {
+					obj_name="dpcon@4";
+				};
+				obj@505 {
+					obj_name="dpcon@5";
+				};
+				obj@506 {
+					obj_name="dpcon@6";
+				};
+				obj@507 {
+					obj_name="dpcon@7";
+				};
+				obj@508 {
+					obj_name="dpcon@8";
+				};
+				obj@509 {
+					obj_name="dpcon@9";
+				};
+				obj@510 {
+					obj_name="dpcon@10";
+				};
+				obj@511 {
+					obj_name="dpcon@11";
+				};
+				obj@512 {
+					obj_name="dpcon@12";
+				};
+				obj@513 {
+					obj_name="dpcon@13";
+				};
+				obj@514 {
+					obj_name="dpcon@14";
+				};
+				obj@515 {
+					obj_name="dpcon@15";
+				};
+				obj@516 {
+					obj_name="dpcon@16";
+				};
+				obj@517 {
+					obj_name="dpcon@17";
+				};
+				obj@518 {
+					obj_name="dpcon@18";
+				};
+				obj@519 {
+					obj_name="dpcon@19";
+				};
+				obj@520 {
+					obj_name="dpcon@20";
+				};
+				obj@521 {
+					obj_name="dpcon@21";
+				};
+				obj@522 {
+					obj_name="dpcon@22";
+				};
+				obj@523 {
+					obj_name="dpcon@23";
+				};
+				obj@524 {
+					obj_name="dpcon@24";
+				};
+				obj@525 {
+					obj_name="dpcon@25";
+				};
+				obj@526 {
+					obj_name="dpcon@26";
+				};
+				obj@527 {
+					obj_name="dpcon@27";
+				};
+				obj@528 {
+					obj_name="dpcon@28";
+				};
+				obj@529 {
+					obj_name="dpcon@29";
+				};
+				obj@530 {
+					obj_name="dpcon@30";
+				};
+				obj@531 {
+					obj_name="dpcon@31";
+				};
+				obj@532 {
+					obj_name="dpcon@32";
+				};
+				obj@12 {
+					obj_name="dpdmai@10";
+				};
+			};
+		};
+	};
+
+	/*****************************************************************
+         * Objects
+         *****************************************************************/
+	objects {
+		/* ------------ DPBP --------------*/
+		dpbp@1 {
+			compatible="fsl,dpbp";
+		};
+		dpbp@2 {
+			compatible="fsl,dpbp";
+		};
+		dpbp@3 {
+			compatible="fsl,dpbp";
+		};
+		dpbp@4 {
+			compatible="fsl,dpbp";
+		};
+
+		/* ------------ DPIO --------------*/
+		dpio@1 {
+			compatible = "fsl,dpio";
+			channel_mode = "DPIO_LOCAL_CHANNEL";
+			num_priorities = <8>;
+		};
+		dpio@2 {
+			compatible = "fsl,dpio";
+			channel_mode = "DPIO_LOCAL_CHANNEL";
+			num_priorities = <8>;
+		};
+		dpio@3 {
+			compatible = "fsl,dpio";
+			channel_mode = "DPIO_LOCAL_CHANNEL";
+			num_priorities = <8>;
+		};
+		dpio@4 {
+			compatible = "fsl,dpio";
+			channel_mode = "DPIO_LOCAL_CHANNEL";
+			num_priorities = <8>;
+		};
+		dpio@5 {
+			compatible = "fsl,dpio";
+			channel_mode = "DPIO_LOCAL_CHANNEL";
+			num_priorities = <8>;
+		};
+		dpio@6 {
+			compatible = "fsl,dpio";
+			channel_mode = "DPIO_LOCAL_CHANNEL";
+			num_priorities = <8>;
+		};
+		dpio@7 {
+			compatible = "fsl,dpio";
+			channel_mode = "DPIO_LOCAL_CHANNEL";
+			num_priorities = <8>;
+		};
+		dpio@8 {
+			compatible = "fsl,dpio";
+			channel_mode = "DPIO_LOCAL_CHANNEL";
+			num_priorities = <8>;
+		};
+
+		/* ------------ DPCON --------------*/
+		/* Currently, only 8-WQ channels are supported. */
+		dpcon@1 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@2 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@3 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@4 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@5 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@6 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@7 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@8 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@9 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@10 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@11 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@12 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@13 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@14 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@15 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@16 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@17 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@18 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@19 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@20 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@21 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@22 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@23 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@24 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@25 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@26 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@27 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@28 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@29 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@30 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@31 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+		dpcon@32 {
+			compatible="fsl,dpcon";
+			num_priorities=<8>;
+		};
+
+		/* ------------ DPNI --------------*/
+		/* Common DPNI properties:
+		 *
+		 * mac_addr = <0x00 0x00 0x00 0x00 0x00 0x00>;
+		 *   An all-zero value will cause the Eth driver to auto-generate
+		 *   a random (but valid) MAC address. Reduces DPL maintenance.
+		 *
+		 * max_senders = <8>;
+		 *   Number of DPIOs to use for transmission.
+		 *
+		 * max_dist_per_tc = <7>;
+		 *   Number of Rx cores to configure hash distribution towards.
+		 *   Un-intuitively, '7' actually means '8' ("add 1 and round to
+		 *   the nearest power of 2").
+		 *
+		 * max_dist_key_size = <24>;
+		 *    Maximum hash key length in bytes.
+		 *
+		 * Other possible properties:
+		 *  max_unicast_filters
+		 *  max_multicast_filters
+		 *  max_vlan_filters
+		 *  max_qos_entries
+		 *  max_qos_key_size
+		 *
+		 * Unless otherwise stated, attributes with value <0> receive a
+		 * default value from the MC and can be skipped from the DPL
+		 * altogether.
+		 */
+		dpni@1 {
+			compatible="fsl,dpni";
+			type = "DPNI_TYPE_NIC";
+			mac_addr = <0x00 0x00 0x00 0x00 0x00 0x00>;
+			max_senders = <8>;
+			options = "DPNI_OPT_MULTICAST_FILTER", "DPNI_OPT_UNICAST_FILTER", "DPNI_OPT_DIST_HASH", "DPNI_OPT_DIST_FS";
+			max_tcs = <1>;
+			max_dist_per_tc = <7>;
+			max_dist_key_size = <24>;
+		};
+		dpni@2 {
+			compatible="fsl,dpni";
+			type = "DPNI_TYPE_NIC";
+			mac_addr = <0x00 0x00 0x00 0x00 0x00 0x00>;
+			max_senders = <8>;
+			options = "DPNI_OPT_MULTICAST_FILTER", "DPNI_OPT_UNICAST_FILTER", "DPNI_OPT_DIST_HASH", "DPNI_OPT_DIST_FS";
+			max_tcs = <1>;
+			max_dist_per_tc = <7>;
+			max_dist_key_size = <24>;
+		};
+		dpni@3 {
+			compatible="fsl,dpni";
+			type = "DPNI_TYPE_NIC";
+			mac_addr = <0x00 0x00 0x00 0x00 0x00 0x00>;
+			max_senders = <8>;
+			options = "DPNI_OPT_MULTICAST_FILTER", "DPNI_OPT_UNICAST_FILTER", "DPNI_OPT_DIST_HASH", "DPNI_OPT_DIST_FS";
+			max_tcs = <1>;
+			max_dist_per_tc = <7>;
+			max_dist_key_size = <24>;
+		};
+		dpni@4 {
+			compatible="fsl,dpni";
+			type = "DPNI_TYPE_NIC";
+			mac_addr = <0x00 0x00 0x00 0x00 0x00 0x00>;
+			max_senders = <8>;
+			options = "DPNI_OPT_MULTICAST_FILTER", "DPNI_OPT_UNICAST_FILTER", "DPNI_OPT_DIST_HASH", "DPNI_OPT_DIST_FS";
+			max_tcs = <1>;
+			max_dist_per_tc = <7>;
+			max_dist_key_size = <24>;
+		};
+
+		/* ------------ DPMAC --------------*/
+		dpmac@1 {
+			compatible = "fsl,dpmac";
+		};
+		dpmac@2 {
+			compatible = "fsl,dpmac";
+		};
+		dpmac@3 {
+			compatible = "fsl,dpmac";
+		};
+		dpmac@4 {
+			compatible = "fsl,dpmac";
+		};
+
+		/* ------------ DPMCP --------------*/
+		dpmcp@1 {
+			compatible="fsl,dpmcp";
+		};
+		dpmcp@2 {
+			compatible="fsl,dpmcp";
+		};
+		dpmcp@3 {
+			compatible="fsl,dpmcp";
+		};
+		dpmcp@4 {
+			compatible="fsl,dpmcp";
+		};
+		dpmcp@5 {
+			compatible="fsl,dpmcp";
+		};
+		dpmcp@6 {
+			compatible="fsl,dpmcp";
+		};
+		dpmcp@7 {
+			compatible="fsl,dpmcp";
+		};
+		dpmcp@8 {
+			compatible="fsl,dpmcp";
+		};
+		dpmcp@9 {
+			compatible="fsl,dpmcp";
+		};
+		dpmcp@10 {
+			compatible="fsl,dpmcp";
+		};
+		dpmcp@11 {
+			compatible="fsl,dpmcp";
+		};
+		dpmcp@12 {
+			compatible="fsl,dpmcp";
+		};
+		dpmcp@13 {
+			compatible="fsl,dpmcp";
+		};
+		dpmcp@14 {
+			compatible="fsl,dpmcp";
+		};
+		dpmcp@15 {
+			compatible="fsl,dpmcp";
+		};
+		dpmcp@16 {
+			compatible="fsl,dpmcp";
+		};
+		dpmcp@17 {
+			compatible="fsl,dpmcp";
+		};
+		dpdmai@10 {
+			priorities = < 2 5 >;
+		};
+	};
+
+	/*****************************************************************
+         * Connections
+         *****************************************************************/
+	connections {
+		/* XFIs */
+		connection@1{
+			endpoint1 = "dpni@1";
+			endpoint2 = "dpmac@1";
+		};
+		connection@2{
+			endpoint1 = "dpni@2";
+			endpoint2 = "dpmac@2";
+		};
+		connection@3{
+			endpoint1 = "dpni@3";
+			endpoint2 = "dpmac@3";
+		};
+		connection@4{
+			endpoint1 = "dpni@4";
+			endpoint2 = "dpmac@4";
+		};
+	};
+};

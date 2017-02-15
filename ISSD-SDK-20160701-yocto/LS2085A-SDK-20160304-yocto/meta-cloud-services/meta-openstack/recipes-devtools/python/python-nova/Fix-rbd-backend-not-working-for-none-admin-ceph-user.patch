@@ -1,0 +1,130 @@
+Fix rbd backend not working for none admin ceph user
+
+commit 7104a6d8b1885f04d3012d621ec14f4be5145994 from
+https://github.com/openstack/nova
+
+The 'rbd_user' option allows nova administrators to override the default user
+account used for RBD operations, with one that has potentially lower
+privileges.  Not all parts of the Nova code honoured the 'rbd_user' option,
+which resulted in failures when attempting to use a lesser privileged user for
+RBD. This fix ensures the '--id' and '--config' parameters are passed to the
+RBD command line tools in all cases.
+
+Change-Id: Id99aa303791143360ad78074184583048e4878f0
+Close-bug: 1255536
+
+Signed-off-by: Haomai Wang <haomai@unitedstack.com>
+[VT: Ported to Havana branch]
+Signed-off-by: Vu Tran <vu.tran@windriver.com>
+
+diff --git a/nova/tests/virt/libvirt/test_libvirt_utils.py b/nova/tests/virt/libvirt/test_libvirt_utils.py
+index ea83d3a..74f4a9e 100644
+--- a/nova/tests/virt/libvirt/test_libvirt_utils.py
++++ b/nova/tests/virt/libvirt/test_libvirt_utils.py
+@@ -40,3 +40,44 @@ blah BLAH: bb
+         self.mox.ReplayAll()
+         disk_type = libvirt_utils.get_disk_type(path)
+         self.assertEqual(disk_type, 'raw')
++
++    def test_list_rbd_volumes(self):
++        conf = '/etc/ceph/fake_ceph.conf'
++        pool = 'fake_pool'
++        user = 'user'
++        self.flags(images_rbd_ceph_conf=conf, group='libvirt')
++        self.flags(rbd_user=user, group='libvirt')
++        fn = self.mox.CreateMockAnything()
++        self.mox.StubOutWithMock(libvirt_utils.utils,
++                                 'execute')
++        libvirt_utils.utils.execute('rbd', '-p', pool, 'ls', '--id',
++                                    user,
++                                    '--conf', conf).AndReturn(("Out", "Error"))
++        self.mox.ReplayAll()
++
++        libvirt_utils.list_rbd_volumes(pool)
++
++        self.mox.VerifyAll()
++
++    def test_remove_rbd_volumes(self):
++        conf = '/etc/ceph/fake_ceph.conf'
++        pool = 'fake_pool'
++        user = 'user'
++        names = ['volume1', 'volume2', 'volume3']
++        self.flags(images_rbd_ceph_conf=conf, group='libvirt')
++        self.flags(rbd_user=user, group='libvirt')
++        fn = self.mox.CreateMockAnything()
++        libvirt_utils.utils.execute('rbd', '-p', pool, 'rm', 'volume1',
++                                    '--id', user, '--conf', conf, attempts=3,
++                                    run_as_root=True)
++        libvirt_utils.utils.execute('rbd', '-p', pool, 'rm', 'volume2',
++                                    '--id', user, '--conf', conf, attempts=3,
++                                    run_as_root=True)
++        libvirt_utils.utils.execute('rbd', '-p', pool, 'rm', 'volume3',
++                                    '--id', user, '--conf', conf, attempts=3,
++                                    run_as_root=True)
++        self.mox.ReplayAll()
++
++        libvirt_utils.remove_rbd_volumes(pool, *names)
++
++        self.mox.VerifyAll()
+diff --git a/nova/virt/libvirt/imagebackend.py b/nova/virt/libvirt/imagebackend.py
+index 51872cf..89fe494 100644
+--- a/nova/virt/libvirt/imagebackend.py
++++ b/nova/virt/libvirt/imagebackend.py
+@@ -460,8 +460,10 @@ class Rbd(Image):
+ 
+     def _ceph_args(self):
+         args = []
+-        args.extend(['--id', CONF.rbd_user])
+-        args.extend(['--conf', self.ceph_conf])
++        if CONF.rbd_user:
++            args.extend(['--id', CONF.rbd_user])
++        if self.ceph_conf:
++            args.extend(['--conf', self.ceph_conf])
+         return args
+ 
+     def _get_mon_addrs(self):
+diff --git a/nova/virt/libvirt/utils.py b/nova/virt/libvirt/utils.py
+index d7c92b7..db533e1 100644
+--- a/nova/virt/libvirt/utils.py
++++ b/nova/virt/libvirt/utils.py
+@@ -262,12 +262,27 @@ def import_rbd_image(*args):
+     execute('rbd', 'import', *args)
+ 
+ 
++def _run_rbd(*args, **kwargs):
++    total = list(args)
++
++    if CONF.rbd_user:
++        total.extend(['--id', str(CONF.rbd_user)])
++    if CONF.libvirt_images_rbd_ceph_conf:
++        total.extend(['--conf', str(CONF.libvirt_images_rbd_ceph_conf)])
++
++    return utils.execute(*total, **kwargs)
++
++
+ def list_rbd_volumes(pool):
+     """List volumes names for given ceph pool.
+ 
+     :param pool: ceph pool name
+     """
+-    out, err = utils.execute('rbd', '-p', pool, 'ls')
++    try:
++        out, err = _run_rbd('rbd', '-p', pool, 'ls')
++    except processutils.ProcessExecutionError:
++        # No problem when no volume in rbd pool
++        return []
+ 
+     return [line.strip() for line in out.splitlines()]
+ 
+@@ -275,9 +290,9 @@ def list_rbd_volumes(pool):
+ def remove_rbd_volumes(pool, *names):
+     """Remove one or more rbd volume."""
+     for name in names:
+-        rbd_remove = ('rbd', '-p', pool, 'rm', name)
++        rbd_remove = ['rbd', '-p', pool, 'rm', name]
+         try:
+-            execute(*rbd_remove, attempts=3, run_as_root=True)
++            _run_rbd(*rbd_remove, attempts=3, run_as_root=True)
+         except processutils.ProcessExecutionError:
+             LOG.warn(_("rbd remove %(name)s in pool %(pool)s failed"),
+                      {'name': name, 'pool': pool})

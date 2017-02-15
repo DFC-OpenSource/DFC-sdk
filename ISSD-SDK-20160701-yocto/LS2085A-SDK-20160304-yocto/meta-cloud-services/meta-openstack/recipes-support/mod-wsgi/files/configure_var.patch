@@ -1,0 +1,100 @@
+---
+ configure.ac |   39 +++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 39 insertions(+)
+
+--- a/configure.ac
++++ b/configure.ac
+@@ -73,18 +73,28 @@
+ 
+ AC_SUBST(PYTHON)
+ 
++if test -z "${PYTHON_VERSION}"; then
+ PYTHON_VERSION=`${PYTHON} -c 'from sys import stdout; \
+     from distutils import sysconfig; \
+     stdout.write((sysconfig.get_config_var("VERSION")))'`
++fi
+ 
++if test -z "${PYTHON_INCLUDEPY}"; then
+ CPPFLAGS1=`${PYTHON} -c 'from sys import stdout; \
+     from distutils import sysconfig; \
+     stdout.write("-I" + sysconfig.get_config_var("INCLUDEPY"))'`
++else
++CPPFLAGS1="${PYTHON_INCLUDEPY}"
++fi
+ 
++if test -z "${PYTHON_CFLAGS}"; then
+ CPPFLAGS2=`${PYTHON} -c 'from sys import stdout; \
+     from distutils import sysconfig; \
+     stdout.write(" ".join(filter(lambda x: x.startswith("-D"), \
+     sysconfig.get_config_var("CFLAGS").split())))'`
++else
++CPPFLAGS2="${PYTHON_CFLAGS}"
++fi
+ 
+ if test "${ENABLE_EMBEDDED}" != "yes"; then
+ CPPFLAGS3="-DMOD_WSGI_DISABLE_EMBEDDED"
+@@ -96,22 +106,43 @@
+ 
+ AC_SUBST(CPPFLAGS)
+ 
++if test -z "${PYTHON_LIBDIR}"; then
+ PYTHONLIBDIR=`${PYTHON} -c 'from sys import stdout; \
+     from distutils import sysconfig; \
+     stdout.write(sysconfig.get_config_var("LIBDIR"))'`
++else
++PYTHONLIBDIR="${PYTHON_LIBDIR}"
++fi
++if test -z "${PYTHON_CFGDIR}"; then
+ PYTHONCFGDIR=`${PYTHON} -c 'from sys import stdout; \
+     import distutils.sysconfig; \
+     stdout.write(distutils.sysconfig.get_python_lib(plat_specific=1, \
+     standard_lib=1) +"/config")'`
++else
++PYTHONCFGDIR="${PYTHON_CFGDIR}"
++fi
++if test -z "${PYTHON_FRAMEWORKDIR}"; then
+ PYTHONFRAMEWORKDIR=`${PYTHON} -c 'from sys import stdout; \
+     from distutils import sysconfig; \
+     stdout.write(sysconfig.get_config_var("PYTHONFRAMEWORKDIR"))'`
++else
++PYTHONFRAMEWORKDIR="${PYTHON_FRAMEWORKDIR}"
++fi
++
++if test -z "${PYTHON_FRAMEWORKPREFIX}"; then
+ PYTHONFRAMEWORKPREFIX=`${PYTHON} -c 'from sys import stdout; \
+     from distutils import sysconfig; \
+     stdout.write(sysconfig.get_config_var("PYTHONFRAMEWORKPREFIX"))'`
++else
++PYTHONFRAMEWORKPREFIX="${PYTHON_FRAMEWORKPREFIX}"
++fi
++if test -z "${PYTHON_FRAMEWORK}"; then
+ PYTHONFRAMEWORK=`${PYTHON} -c 'from sys import stdout; \
+     from distutils import sysconfig; \
+     stdout.write(sysconfig.get_config_var("PYTHONFRAMEWORK"))'`
++else
++PYTHONFRAMEWORK="${PYTHON_FRAMEWORK}"
++fi
+ 
+ if test "${PYTHONFRAMEWORKDIR}" = "no-framework" -o \
+         "${ENABLE_FRAMEWORK}" != "yes"; then
+@@ -119,12 +150,20 @@
+     LDFLAGS2="-L${PYTHONCFGDIR}"
+ 
+     LDLIBS1="-lpython${PYTHON_VERSION}"
++    if test -z "${PYTHON_LIBS}"; then
+     LDLIBS2=`${PYTHON} -c 'from sys import stdout; \
+         from distutils import sysconfig; \
+         stdout.write(sysconfig.get_config_var("LIBS"))'`
++    else
++    LDLIBS3="${PYTHON_LIBS}"
++    fi
++    if test -z "${PYTHON_SYSLIBS}"; then
+     LDLIBS3=`${PYTHON} -c 'from sys import stdout; \
+         from distutils import sysconfig; \
+         stdout.write(sysconfig.get_config_var("SYSLIBS"))'`
++    else
++    LDLIBS3="${PYTHON_SYSLIBS}"
++    fi
+ else
+     LDFLAGS1="-Wl,-F${PYTHONFRAMEWORKPREFIX} -framework ${PYTHONFRAMEWORK}"
+ 

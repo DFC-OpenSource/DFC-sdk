@@ -1,0 +1,32 @@
+From 0d6b66b2d5314b454a421bd22fcc8173baf0bc95 Mon Sep 17 00:00:00 2001
+From: Bruce Ashfield <bruce.ashfield@windriver.com>
+Date: Mon, 20 Oct 2014 15:59:33 -0400
+Subject: [PATCH] keystone: explicitly import localcontext from oslo.messaging
+
+When using apache as a front end to keystone, juno has a problem when
+authenticating clients due to a failure to import localcontext from
+oslo.
+
+We can work around this issue by doing the export explicitly in the
+entry routine versus in the library itself.
+
+Signed-off-by: Bruce Ashfield <bruce.ashfield@windriver.com>
+---
+ httpd/keystone.py | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/httpd/keystone.py b/httpd/keystone.py
+index f5ce498c5152..b2b9285ad2ab 100644
+--- a/httpd/keystone.py
++++ b/httpd/keystone.py
+@@ -32,6 +32,7 @@ from keystone.common import sql
+ from keystone import config
+ from keystone.openstack.common import log
+ from keystone import service
++from oslo.messaging import localcontext
+ 
+ 
+ CONF = config.CONF
+-- 
+1.9.1
+

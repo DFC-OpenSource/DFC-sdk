@@ -1,0 +1,88 @@
+glance change builtin tests config location
+
+Many glance built-in testcases failed because they
+can not find glance configuration files, as these
+testcases assume that they are run at python
+site-packages dir.
+
+So forcing these failure testcases to look for
+these configuration files using absolute path.
+
+Signed-off-by: Vu Tran <vu.tran@windriver.com>
+
+Index: git/glance/tests/functional/__init__.py
+===================================================================
+--- git.orig/glance/tests/functional/__init__.py
++++ git/glance/tests/functional/__init__.py
+@@ -849,7 +849,7 @@
+         return engine.execute(sql)
+ 
+     def copy_data_file(self, file_name, dst_dir):
+-        src_file_name = os.path.join('glance/tests/etc', file_name)
++        src_file_name = os.path.join('%PYTHON_SITEPACKAGES_DIR%/glance/tests/etc', file_name)
+         shutil.copy(src_file_name, dst_dir)
+         dst_file_name = os.path.join(dst_dir, file_name)
+         return dst_file_name
+Index: git/glance/tests/unit/api/test_common.py
+===================================================================
+--- git.orig/glance/tests/unit/api/test_common.py
++++ git/glance/tests/unit/api/test_common.py
+@@ -135,7 +135,7 @@
+         super(TestMalformedRequest, self).setUp()
+         self.config(flavor='',
+                     group='paste_deploy',
+-                    config_file='etc/glance-api-paste.ini')
++                    config_file='/etc/glance/glance-api-paste.ini')
+         self.api = config.load_paste_app('glance-api')
+ 
+     def test_redirect_incomplete_url(self):
+Index: git/glance/tests/unit/base.py
+===================================================================
+--- git.orig/glance/tests/unit/base.py
++++ git/glance/tests/unit/base.py
+@@ -80,7 +80,7 @@
+                                                  registry=self.registry)
+ 
+     def _copy_data_file(self, file_name, dst_dir):
+-        src_file_name = os.path.join('glance/tests/etc', file_name)
++        src_file_name = os.path.join('%PYTHON_SITEPACKAGES_DIR%/glance/tests/etc', file_name)
+         shutil.copy(src_file_name, dst_dir)
+         dst_file_name = os.path.join(dst_dir, file_name)
+         return dst_file_name
+Index: git/glance/tests/unit/common/test_config.py
+===================================================================
+--- git.orig/glance/tests/unit/common/test_config.py
++++ git/glance/tests/unit/common/test_config.py
+@@ -63,8 +63,7 @@
+ 
+         paste_to = temp_file.replace('.conf', '-paste.ini')
+         if not paste_config_file and make_paste_file:
+-            paste_from = os.path.join(os.getcwd(),
+-                                      'etc/glance-registry-paste.ini')
++            paste_from = '/etc/glance/glance-registry-paste.ini'
+             _appendto(paste_from, paste_to, paste_append)
+ 
+         app = config.load_paste_app('glance-registry')
+@@ -89,8 +88,7 @@
+                                      paste_append=pipeline)
+ 
+     def test_load_paste_app_with_paste_config_file(self):
+-        paste_config_file = os.path.join(os.getcwd(),
+-                                         'etc/glance-registry-paste.ini')
++        paste_config_file = '/etc/glance/glance-registry-paste.ini'
+         expected_middleware = osprofiler.web.WsgiMiddleware
+         self._do_test_load_paste_app(expected_middleware,
+                                      paste_config_file=paste_config_file)
+Index: git/glance/tests/utils.py
+===================================================================
+--- git.orig/glance/tests/utils.py
++++ git/glance/tests/utils.py
+@@ -76,7 +76,7 @@
+             property_utils.CONFIG.remove_section(section)
+ 
+     def _copy_data_file(self, file_name, dst_dir):
+-        src_file_name = os.path.join('glance/tests/etc', file_name)
++        src_file_name = os.path.join('%PYTHON_SITEPACKAGES_DIR%/glance/tests/etc', file_name)
+         shutil.copy(src_file_name, dst_dir)
+         dst_file_name = os.path.join(dst_dir, file_name)
+         return dst_file_name

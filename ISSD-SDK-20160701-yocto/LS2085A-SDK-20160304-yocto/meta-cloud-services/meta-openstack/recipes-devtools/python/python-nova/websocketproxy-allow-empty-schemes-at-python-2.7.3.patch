@@ -1,0 +1,34 @@
+From 0d727a196e2fe1e13956e2417b7a325be858b2db Mon Sep 17 00:00:00 2001
+From: Bruce Ashfield <bruce.ashfield@windriver.com>
+Date: Wed, 5 Nov 2014 11:21:48 -0500
+Subject: [PATCH] websocketproxy: allow empty schemes at python 2.7.3
+
+The upstream project is concerned with a bug in empty schemes with
+2.7.3. But since Yocto is 2.7.3 and we get an empty scheme via websockify,
+no VNC consoles are possible.
+
+Rather than upreving python (big change), we aren't being hit by the
+referenced bug, so we simply make sure that the condition can never
+be true.
+
+Signed-off-by: Bruce Ashfield <bruce.ashfield@windriver.com>
+---
+ nova/console/websocketproxy.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/nova/console/websocketproxy.py b/nova/console/websocketproxy.py
+index 4d32ff4328bb..85e3ab43293f 100644
+--- a/nova/console/websocketproxy.py
++++ b/nova/console/websocketproxy.py
+@@ -45,7 +45,7 @@ class NovaProxyRequestHandlerBase(object):
+         # The nova expected behavior is to have token
+         # passed to the method GET of the request
+         parse = urlparse.urlparse(self.path)
+-        if parse.scheme not in ('http', 'https'):
++        if parse.scheme not in ('http', 'https') and False:
+             # From a bug in urlparse in Python < 2.7.4 we cannot support
+             # special schemes (cf: http://bugs.python.org/issue9374)
+             if sys.version_info < (2, 7, 4):
+-- 
+1.9.1
+

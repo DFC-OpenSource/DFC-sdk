@@ -1,0 +1,26 @@
+From 3307dc591b95381b2ba5f3139a05997cc610e48d Mon Sep 17 00:00:00 2001
+From: Will Newton <will.newton@linaro.org>
+Date: Thu, 13 Nov 2014 16:18:06 +0000
+Subject: [PATCH 32/32] sysdeps/unix/sysv/linux/aarch64/configure: Reduce
+ kernel version to 3.18
+
+---
+ sysdeps/unix/sysv/linux/aarch64/configure | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/sysdeps/unix/sysv/linux/aarch64/configure b/sysdeps/unix/sysv/linux/aarch64/configure
+index faef1dd..a523bfe 100755
+--- a/sysdeps/unix/sysv/linux/aarch64/configure
++++ b/sysdeps/unix/sysv/linux/aarch64/configure
+@@ -2,7 +2,7 @@
+  # Local configure fragment for sysdeps/unix/sysv/linux/aarch64.
+ 
+ if test $aarch64_config_abi = ilp32; then
+-  arch_minimum_kernel=3.19.0
++  arch_minimum_kernel=3.18.0
+   test -n "$libc_cv_slibdir" ||
+ case "$prefix" in
+ /usr | /usr/)
+-- 
+1.9.3
+

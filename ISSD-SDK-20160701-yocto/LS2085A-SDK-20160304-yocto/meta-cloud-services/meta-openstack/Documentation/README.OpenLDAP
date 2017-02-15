@@ -1,0 +1,165 @@
+OpenLDAP support for keystone and pam.
+
+This feature enables openldap users to login to keystone and to
+a controller/aio system via pam. To enable this feature, add
+OpenLDAP into DISTRO_FEATURES
+
+e.g. in conf/local.conf
+
+DISTRO_FEATURES_append += " OpenLDAP"
+
+A number of variables can be specified during the build phase that configures
+OpenLDAP specific options:
+
+  LDAP_DN - default DN for ldap
+    default: "dc=my-domain,dc=com"
+  LDAP_DATADIR - default directory for ldap's data directory
+    default: "/etc/openldap-data/"
+
+The OpenLDAP database by default is initialized with the trees required
+(/etc/openldap/ops-base.ldif)
+
+	dn: dc=my-domain,dc=com
+	objectclass: dcObject
+	objectclass: top
+	objectclass: organization
+	o: my-domain Company
+	dc: my-domain
+	
+	dn: cn=Manager,dc=my-domain,dc=com
+	objectclass: organizationalRole
+	cn: Manager
+	description: LDAP administratior
+	roleOccupant: dc=my-domain,dc=com
+	
+	dn: ou=Roles,dc=my-domain,dc=com
+	objectclass:organizationalunit
+	ou: Roles
+	description: generic groups branch
+	
+	dn: ou=Users,dc=my-domain,dc=com
+	objectclass:organizationalunit
+	ou: Users
+	description: generic groups branch
+	
+	dn: ou=Groups,dc=my-domain,dc=com
+	objectclass:organizationalunit
+	ou: Groups
+	description: generic groups branch
+
+A hybrid backend is added to the system which enables keystone to 
+lookup users in both the sql and the LDAP database. For authentication,
+LDAP lookup happens if the user cannot be found in SQL. For other operations, 
+the SQL backend is used.
+
+To enable ldap support in keystone, /etc/keystone/keystone.conf
+has been modified with the following:
+
+keystone.conf
+[identity]
+driver = keystone.identity.backends.hybrid_identity.Identity
+[assignment]
+driver = keystone.assignment.backends.hybrid_assignment.Assignment
+
+
+Sample Usage:
+
+1. create the following ldif files:
+
+dn: uid=johndoe,ou=Users,dc=my-domain,dc=com
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: johndoe
+cn: John Doe
+sn: Doe
+givenName: John
+title: Guinea Pig
+telephoneNumber: +0 000 000 0000
+mobile: +0 000 000 0000
+labeledURI: https://archlinux.org/
+loginShell: /bin/bash
+uidNumber: 9999
+gidNumber: 9999
+homeDirectory: /home/johndoe/
+description: This is an example user
+ou: Users
+
+2. Add to the LDAP database:
+ldapadd  -D "cn=Manager,dc=my-domain,dc=com" -w secret -f ./user.ldif 
+
+3. Assign a password to the new user:
+
+ldappasswd -D "cn=Manager,dc=my-domain,dc=com"  -w secret -s password "uid=johndoe,ou=Users,dc=my-domain,dc=com"
+
+At this point, you can attempt to login to horizon with the newly created
+user: johndoe and password: password
+
+At this point, the userid/password will be accept but since no role/tenant
+has been assigned, the user will see:
+
+"You are not authorized for any projects"
+
+Also, you can su/login/ssh into the system as the new user:
+
+root@controller:~# su - johndoe
+Creating directory '/home/johndoe/'.
+
+4. Assign the newly created user a role and a tenant/project:
+
+root@controller:~# keystone role-list
+kWARNING: Bypassing authentication using a token & endpoint (authentication credentials are being ignored).
+e+----------------------------------+-----------------+
+|                id                |       name      |
++----------------------------------+-----------------+
+| 614bf212ecb146e8ad5c65bd8152e72e |      Member     |
+| cdbe49c05ca0402d832c585758418716 |  ResellerAdmin  |
+| 9fe2ff9ee4384b1894a90878d3e92bab |     _member_    |
+| 35403ad1589148b3a2f83f78dc10365b |      admin      |
+| 37999e5be236488c874cdcb536b2bda1 | heat_stack_user |
++----------------------------------+-----------------+
+root@controller:~# keystone tenant-list
+WARNING: Bypassing authentication using a token & endpoint (authentication credentials are being ignored).
++----------------------------------+----------+---------+
+|                id                |   name   | enabled |
++----------------------------------+----------+---------+
+| 69130c58b26c40898b46e4426dc3e1ba |  admin   |   True  |
+| e83f8d16384449e197aa8777d0d310c3 | alt_demo |   True  |
+| bce83b3fd5a14dd6bbb88438e27077a8 |   demo   |   True  |
+| 579a04e72b274afd81b2becc94c4661c | service  |   True  |
++----------------------------------+----------+---------+
+
+We add the user johndoe to the role Member (614bf212ecb146e8ad5c65bd8152e72e) and
+tenant (bce83b3fd5a14dd6bbb88438e27077a8)
+
+keystone user-role-add \
+    --tenant-id bce83b3fd5a14dd6bbb88438e2 7077a8 \
+    --user-id johndoe \
+    --role-id 614bf212ecb146e8ad5c65bd8152e72e
+
+Now we can login to horizon as johndoe and we see that the user is in the project
+demo.
+
+
+Note:
+
+1.  If the LDAP server isn't running, keystone operations will fail 
+with the following:
+
+An unexpected error prevented the server from fulfilling your request. 
+{'desc': "Can't contact LDAP server"} (HTTP 500)
+
+2.  If a role was created for a user in the ldap server and we're using 
+the sql backend:
+
+root@controller:~# keystone user-role-list --user-id johndoe \
+  --tenant-id bce83b3 fd5a14dd6bbb88438e27077a8
+
+WARNING: Bypassing authentication using a token & endpoint (authentication credentials 
+are being ignored).
+No user with a name or ID of 'johndoe' exists.
+
+

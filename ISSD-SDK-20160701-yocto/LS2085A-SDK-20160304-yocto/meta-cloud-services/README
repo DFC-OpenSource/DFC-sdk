@@ -1,0 +1,53 @@
+meta-cloud-services
+===================
+
+This layer provides support for building the packages required to support cloud
+agents and APIs for construction OE-based cloud solutions. 
+
+This layer contains common infrastructure and recipes, while specific sub-layers
+provide support for various cloud/clustering solutions (oVirt, OpenStack, etc).
+
+Dependencies
+------------
+
+This layer depends on:
+
+URI: git://github.com/openembedded/oe-core.git
+branch: master
+revision: HEAD
+prio: default
+
+
+Layers
+------
+
+openstack layers
+----------------
+
+There are six openstack layers that are used to build a controller/compute
+node image pair. The dependencies of these layers are also required for a
+build, and are listed in the layers themselves.
+
+   - meta-cloud-services/meta-openstack
+   - meta-cloud-services/meta-openstack-compute-deploy
+   - meta-cloud-services/meta-openstack-controller-deploy
+   - meta-cloud-services/meta-openstack-qemu
+   - meta-cloud-services/meta-openstack-compute-test-config
+   - meta-cloud-services/meta-openstack-controller-test-config
+
+Maintenance
+-----------
+
+Send pull requests, patches, comments or questions to meta-virtualization@yoctoproject.org
+
+When sending single patches, please using something like:
+'git send-email -1 --to meta-virtualization@yoctoproject.org --subject-prefix=meta-virtualization][PATCH'
+
+Maintainers: Bruce Ashfield <bruce.ashfield@windriver.com>
+
+License
+-------
+
+All metadata is MIT licensed unless otherwise stated. Source code included
+in tree for individual recipes is under the LICENSE stated in each recipe
+(.bb file) unless otherwise stated.

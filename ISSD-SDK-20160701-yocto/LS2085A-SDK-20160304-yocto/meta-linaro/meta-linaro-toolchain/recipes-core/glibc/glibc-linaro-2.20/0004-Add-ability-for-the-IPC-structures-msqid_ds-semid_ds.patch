@@ -1,0 +1,219 @@
+From 2ad4fd571dd039a756d2a7b6c5fbf6aad19721ec Mon Sep 17 00:00:00 2001
+From: Andrew Pinski <apinski@cavium.com>
+Date: Mon, 27 Oct 2014 00:59:27 -0700
+Subject: [PATCH 04/32] Add ability for the IPC structures (msqid_ds, semid_ds,
+ shmid_ds, etc.) to have time_t being 64bit
+
+The generic headers for the IPC structures (msqid_ds, semid_ds, shmid_ds, etc.)
+already have the ability to already take account time_t being 64bit but only
+if WORDSIZE is set 64.  Also for AARCH64:ILP32, we want these structures to
+match up with the LP64 size, so we add change the all of the unsigned long
+types in these headers to be __syscall_ulong_t.  Also there is one size_t
+field which we need to be changed for AARCH64:ILP32 so we add
+a macro which can be changed but defaulting to size_t.
+
+* sysdeps/unix/sysv/linux/generic/bits/msq.h (msgqnum_t): Change to
+__syscall_ulong_t.
+(msglen_t): Likewise.
+(__IPC_TIME_T_64_BITS): Define if not defined already and WORDSIZE
+is 64.
+(struct msqid_ds): Change WORD_SIZE check to check __IPC_TIME_T_64_BITS.
+Also change some unsigned long fields to __syscall_ulong_t.
+* sysdeps/unix/sysv/linux/generic/bits/sem.h (__IPC_TIME_T_64_BITS):
+Define if not defined already and WORDSIZE is 64.
+(struct semid_ds): Change WORD_SIZE check to check __IPC_TIME_T_64_BITS.
+Also change some unsigned long fields to __syscall_ulong_t.
+* sysdeps/unix/sysv/linux/generic/bits/shm.h (__IPC_TIME_T_64_BITS):
+Define if not defined already and WORDSIZE is 64.
+(__SHMID_DS_SIZE_TYPE): Define if not already defined.
+(struct shmid_ds): Change WORD_SIZE check to check __IPC_TIME_T_64_BITS.
+Change shm_segsz definition to be based on __SHMID_DS_SIZE_TYPE.
+Also change some unsigned long fields to __syscall_ulong_t.
+(struct	shminfo): change some unsigned long fields to __syscall_ulong_t.
+(struct shm_info): Likewise.
+---
+ sysdeps/unix/sysv/linux/generic/bits/msq.h | 21 ++++++++-----
+ sysdeps/unix/sysv/linux/generic/bits/sem.h | 14 ++++++---
+ sysdeps/unix/sysv/linux/generic/bits/shm.h | 50 +++++++++++++++++-------------
+ 3 files changed, 51 insertions(+), 34 deletions(-)
+
+diff --git a/sysdeps/unix/sysv/linux/generic/bits/msq.h b/sysdeps/unix/sysv/linux/generic/bits/msq.h
+index f3fcd8d..df5128e 100644
+--- a/sysdeps/unix/sysv/linux/generic/bits/msq.h
++++ b/sysdeps/unix/sysv/linux/generic/bits/msq.h
+@@ -31,8 +31,13 @@
+ #endif
+ 
+ /* Types used in the structure definition.  */
+-typedef unsigned long int msgqnum_t;
+-typedef unsigned long int msglen_t;
++typedef __syscall_ulong_t msgqnum_t;
++typedef __syscall_ulong_t msglen_t;
++
++#if !defined(__IPC_TIME_T_64_BITS) && __WORDSIZE == 64
++#define __IPC_TIME_T_64_BITS
++#endif
++
+ 
+ /* Structure of record for one message inside the kernel.
+    The type `struct msg' is opaque.  */
+@@ -40,24 +45,24 @@ struct msqid_ds
+ {
+   struct ipc_perm msg_perm;	/* structure describing operation permission */
+   __time_t msg_stime;		/* time of last msgsnd command */
+-#if __WORDSIZE == 32
++#ifndef __IPC_TIME_T_64_BITS
+   unsigned long int __glibc_reserved1;
+ #endif
+   __time_t msg_rtime;		/* time of last msgrcv command */
+-#if __WORDSIZE == 32
++#ifndef __IPC_TIME_T_64_BITS
+   unsigned long int __glibc_reserved2;
+ #endif
+   __time_t msg_ctime;		/* time of last change */
+-#if __WORDSIZE == 32
++#ifndef __IPC_TIME_T_64_BITS
+   unsigned long int __glibc_reserved3;
+ #endif
+-  unsigned long int __msg_cbytes; /* current number of bytes on queue */
++  __syscall_ulong_t __msg_cbytes; /* current number of bytes on queue */
+   msgqnum_t msg_qnum;		/* number of messages currently on queue */
+   msglen_t msg_qbytes;		/* max number of bytes allowed on queue */
+   __pid_t msg_lspid;		/* pid of last msgsnd() */
+   __pid_t msg_lrpid;		/* pid of last msgrcv() */
+-  unsigned long int __glibc_reserved4;
+-  unsigned long int __glibc_reserved5;
++  __syscall_ulong_t __glibc_reserved4;
++  __syscall_ulong_t __glibc_reserved5;
+ };
+ 
+ #ifdef __USE_MISC
+diff --git a/sysdeps/unix/sysv/linux/generic/bits/sem.h b/sysdeps/unix/sysv/linux/generic/bits/sem.h
+index 3c9aea8..a0a5d47 100644
+--- a/sysdeps/unix/sysv/linux/generic/bits/sem.h
++++ b/sysdeps/unix/sysv/linux/generic/bits/sem.h
+@@ -36,21 +36,25 @@
+ #define SETALL		17		/* set all semval's */
+ 
+ 
++#if !defined(__IPC_TIME_T_64_BITS) && __WORDSIZE == 64
++#define __IPC_TIME_T_64_BITS
++#endif
++
+ /* Data structure describing a set of semaphores.  */
+ struct semid_ds
+ {
+   struct ipc_perm sem_perm;		/* operation permission struct */
+   __time_t sem_otime;			/* last semop() time */
+-#if __WORDSIZE == 32
++#ifndef __IPC_TIME_T_64_BITS
+   unsigned long int __glibc_reserved1;
+ #endif
+   __time_t sem_ctime;			/* last time changed by semctl() */
+-#if __WORDSIZE == 32
++#ifndef __IPC_TIME_T_64_BITS
+   unsigned long int __glibc_reserved2;
+ #endif
+-  unsigned long int sem_nsems;		/* number of semaphores in set */
+-  unsigned long int __glibc_reserved3;
+-  unsigned long int __glibc_reserved4;
++  __syscall_ulong_t sem_nsems;		/* number of semaphores in set */
++  __syscall_ulong_t __glibc_reserved3;
++  __syscall_ulong_t __glibc_reserved4;
+ };
+ 
+ /* The user should define a union like the following to use it for arguments
+diff --git a/sysdeps/unix/sysv/linux/generic/bits/shm.h b/sysdeps/unix/sysv/linux/generic/bits/shm.h
+index 0dbed61..78ff79d 100644
+--- a/sysdeps/unix/sysv/linux/generic/bits/shm.h
++++ b/sysdeps/unix/sysv/linux/generic/bits/shm.h
+@@ -44,31 +44,39 @@ __BEGIN_DECLS
+ extern int __getpagesize (void) __THROW __attribute__ ((__const__));
+ 
+ 
++#if !defined(__IPC_TIME_T_64_BITS) && __WORDSIZE == 64
++#define __IPC_TIME_T_64_BITS
++#endif
++
+ /* Type to count number of attaches.  */
+-typedef unsigned long int shmatt_t;
++typedef __syscall_ulong_t shmatt_t;
++
++#ifndef __SHMID_DS_SIZE_TYPE
++#define __SHMID_DS_SIZE_TYPE(field) size_t field
++#endif
+ 
+ /* Data structure describing a shared memory segment.  */
+ struct shmid_ds
+   {
+     struct ipc_perm shm_perm;		/* operation permission struct */
+-    size_t shm_segsz;			/* size of segment in bytes */
++    __SHMID_DS_SIZE_TYPE(shm_segsz);	/* size of segment in bytes */
+     __time_t shm_atime;			/* time of last shmat() */
+-#if __WORDSIZE == 32
++#ifndef __IPC_TIME_T_64_BITS
+     unsigned long int __glibc_reserved1;
+ #endif
+     __time_t shm_dtime;			/* time of last shmdt() */
+-#if __WORDSIZE == 32
++#ifndef __IPC_TIME_T_64_BITS
+     unsigned long int __glibc_reserved2;
+ #endif
+     __time_t shm_ctime;			/* time of last change by shmctl() */
+-#if __WORDSIZE == 32
++#ifndef __IPC_TIME_T_64_BITS
+     unsigned long int __glibc_reserved3;
+ #endif
+     __pid_t shm_cpid;			/* pid of creator */
+     __pid_t shm_lpid;			/* pid of last shmop */
+     shmatt_t shm_nattch;		/* number of current attaches */
+-    unsigned long int __glibc_reserved4;
+-    unsigned long int __glibc_reserved5;
++    __syscall_ulong_t __glibc_reserved4;
++    __syscall_ulong_t __glibc_reserved5;
+   };
+ 
+ #ifdef __USE_MISC
+@@ -85,25 +93,25 @@ struct shmid_ds
+ 
+ struct	shminfo
+   {
+-    unsigned long int shmmax;
+-    unsigned long int shmmin;
+-    unsigned long int shmmni;
+-    unsigned long int shmseg;
+-    unsigned long int shmall;
+-    unsigned long int __glibc_reserved1;
+-    unsigned long int __glibc_reserved2;
+-    unsigned long int __glibc_reserved3;
+-    unsigned long int __glibc_reserved4;
++    __syscall_ulong_t shmmax;
++    __syscall_ulong_t shmmin;
++    __syscall_ulong_t shmmni;
++    __syscall_ulong_t shmseg;
++    __syscall_ulong_t shmall;
++    __syscall_ulong_t __glibc_reserved1;
++    __syscall_ulong_t __glibc_reserved2;
++    __syscall_ulong_t __glibc_reserved3;
++    __syscall_ulong_t __glibc_reserved4;
+   };
+ 
+ struct shm_info
+   {
+     int used_ids;
+-    unsigned long int shm_tot;	/* total allocated shm */
+-    unsigned long int shm_rss;	/* total resident shm */
+-    unsigned long int shm_swp;	/* total swapped shm */
+-    unsigned long int swap_attempts;
+-    unsigned long int swap_successes;
++    __syscall_ulong_t shm_tot;	/* total allocated shm */
++    __syscall_ulong_t shm_rss;	/* total resident shm */
++    __syscall_ulong_t shm_swp;	/* total swapped shm */
++    __syscall_ulong_t swap_attempts;
++    __syscall_ulong_t swap_successes;
+   };
+ 
+ #endif /* __USE_MISC */
+-- 
+1.9.3
+

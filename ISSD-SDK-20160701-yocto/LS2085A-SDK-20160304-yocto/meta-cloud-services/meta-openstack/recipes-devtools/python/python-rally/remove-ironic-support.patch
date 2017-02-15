@@ -1,0 +1,87 @@
+remove ironic support
+
+OpenStack ironic is not currently supported, so remove
+any code in rally that invokes ironicclient.
+
+Signed-off-by: Vu Tran <vu.tran@windriver.com>
+
+diff --git a/rally/benchmark/context/images.py b/rally/benchmark/context/images.py
+index 9642af4..92abbf6 100644
+--- a/rally/benchmark/context/images.py
++++ b/rally/benchmark/context/images.py
+@@ -21,6 +21,7 @@ from rally import exceptions
+ from rally.openstack.common import log as logging
+ from rally import osclients
+ from rally import utils as rutils
++from rally.openstack.common.gettextutils import _
+ 
+ 
+ LOG = logging.getLogger(__name__)
+diff --git a/rally/osclients.py b/rally/osclients.py
+index af916b9..66522cd 100644
+--- a/rally/osclients.py
++++ b/rally/osclients.py
+@@ -19,7 +19,6 @@ from ceilometerclient import client as ceilometer
+ from cinderclient import client as cinder
+ import glanceclient as glance
+ from heatclient import client as heat
+-from ironicclient import client as ironic
+ from keystoneclient import exceptions as keystone_exceptions
+ from keystoneclient.v2_0 import client as keystone
+ from neutronclient.neutron import client as neutron
+@@ -204,16 +203,3 @@ class Clients(object):
+                                    insecure=CONF.https_insecure,
+                                    cacert=CONF.https_cacert)
+         return client
+-
+-    @memoize('ironic')
+-    def ironic(self, version='1.0'):
+-        """Returns Ironic client."""
+-        client = ironic.Client(version,
+-                               username=self.endpoint.username,
+-                               password=self.endpoint.password,
+-                               tenant_name=self.endpoint.tenant_name,
+-                               auth_url=self.endpoint.auth_url,
+-                               timeout=CONF.openstack_client_http_timeout,
+-                               insecure=CONF.https_insecure,
+-                               cacert=CONF.https_cacert)
+-        return client
+diff --git a/requirements.txt b/requirements.txt
+index 9ab2e61..318bcfe 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -17,7 +17,6 @@ python-neutronclient>=2.3.5,<3
+ python-cinderclient>=1.0.6
+ python-heatclient>=0.2.9
+ python-ceilometerclient>=1.0.6
+-python-ironicclient
+ python-subunit>=0.0.18
+ requests>=1.1
+ SQLAlchemy>=0.7.8,!=0.9.5,<=0.9.99
+diff --git a/tests/test_osclients.py b/tests/test_osclients.py
+index 49cecb8..6ca03f4 100644
+--- a/tests/test_osclients.py
++++ b/tests/test_osclients.py
+@@ -161,22 +161,3 @@ class OSClientsTestCase(test.TestCase):
+             mock_ceilometer.Client.assert_called_once_with("2", **kw)
+             self.assertEqual(self.clients.cache["ceilometer"],
+                              fake_ceilometer)
+-
+-    @mock.patch("rally.osclients.ironic")
+-    def test_ironic(self, mock_ironic):
+-        fake_ironic = fakes.FakeIronicClient()
+-        mock_ironic.Client = mock.MagicMock(return_value=fake_ironic)
+-        self.assertTrue("ironic" not in self.clients.cache)
+-        client = self.clients.ironic()
+-        self.assertEqual(client, fake_ironic)
+-        kw = {
+-            "username": self.endpoint.username,
+-            "password": self.endpoint.password,
+-            "tenant_name": self.endpoint.tenant_name,
+-            "auth_url": self.endpoint.auth_url,
+-            "timeout": cfg.CONF.openstack_client_http_timeout,
+-            "insecure": cfg.CONF.https_insecure,
+-            "cacert": cfg.CONF.https_cacert
+-        }
+-        mock_ironic.Client.assert_called_once_with("1.0", **kw)
+-        self.assertEqual(self.clients.cache["ironic"], fake_ironic)

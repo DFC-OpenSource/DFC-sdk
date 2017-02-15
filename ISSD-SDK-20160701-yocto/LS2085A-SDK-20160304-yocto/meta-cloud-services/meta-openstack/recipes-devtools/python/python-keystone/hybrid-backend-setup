@@ -1,0 +1,6 @@
+#!/bin/sh
+
+/etc/keystone/convert_keystone_backend.py hybrid
+
+/etc/init.d/openldap start
+/etc/init.d/keystone restart

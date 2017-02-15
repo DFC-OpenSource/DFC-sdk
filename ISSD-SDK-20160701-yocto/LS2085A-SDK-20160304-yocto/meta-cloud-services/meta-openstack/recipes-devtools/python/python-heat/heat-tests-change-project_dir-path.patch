@@ -1,0 +1,23 @@
+heat tests change project_dir path
+
+By default, heat-tests sets project dir to
+/usr/<lib/lib64>/python2.7/site-packages/.  However
+all heat config files are within /etc/heat.  So
+set project_dir to "/"
+
+Signed-off-by: Vu Tran <vu.tran@windriver.com>
+
+diff --git a/heat/tests/common.py b/heat/tests/common.py
+index ea5df9a..2bdc231 100644
+--- a/heat/tests/common.py
++++ b/heat/tests/common.py
+@@ -42,7 +42,8 @@ class HeatTestCase(testtools.TestCase):
+         self.addCleanup(enable_sleep)
+ 
+         mod_dir = os.path.dirname(sys.modules[__name__].__file__)
+-        project_dir = os.path.abspath(os.path.join(mod_dir, '../../'))
++        #project_dir = os.path.abspath(os.path.join(mod_dir, '../../'))
++        project_dir = "/"
+         env_dir = os.path.join(project_dir, 'etc', 'heat',
+                                'environment.d')
+ 

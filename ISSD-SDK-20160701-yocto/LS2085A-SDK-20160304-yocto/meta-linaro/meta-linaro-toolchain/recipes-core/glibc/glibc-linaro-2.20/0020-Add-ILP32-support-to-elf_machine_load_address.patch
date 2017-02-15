@@ -1,0 +1,61 @@
+From 2225cd23a15c1e398188cb9bb17fb6aebbfca617 Mon Sep 17 00:00:00 2001
+From: Andrew Pinski <apinski@cavium.com>
+Date: Mon, 27 Oct 2014 00:59:43 -0700
+Subject: [PATCH 20/32] Add ILP32 support to elf_machine_load_address.
+
+This adds ILP32 support to elf_machine_load_address.
+Since elf_machine_load_address depends on the static address being
+found without relocations, we need to use 16bit relocation which gets
+resolved at link time for ILP32.  This is just like how the 32bit
+relocation gets resolved at link time for LP64.
+
+* sysdeps/aarch64/dl-machine.h (elf_machine_load_address): Add support
+for ILP32.
+---
+ sysdeps/aarch64/dl-machine.h | 20 +++++++++++++++++---
+ 1 file changed, 17 insertions(+), 3 deletions(-)
+
+diff --git a/sysdeps/aarch64/dl-machine.h b/sysdeps/aarch64/dl-machine.h
+index 121b178..f3bcad1 100644
+--- a/sysdeps/aarch64/dl-machine.h
++++ b/sysdeps/aarch64/dl-machine.h
+@@ -54,19 +54,33 @@ elf_machine_load_address (void)
+      by constructing a non GOT reference to the symbol, the dynamic
+      address of the symbol we compute using adrp/add to compute the
+      symbol's address relative to the PC.
+-     This depends on 32bit relocations being resolved at link time
+-     and that the static address fits in the 32bits.  */
++     This depends on 32/16bit relocations being resolved at link time
++     and that the static address fits in the 32/16 bits.  */
+ 
+   ElfW(Addr) static_addr;
+   ElfW(Addr) dynamic_addr;
+ 
+   asm ("					\n"
+ "	adrp	%1, _dl_start;			\n"
++#ifdef __LP64__
+ "       add	%1, %1, #:lo12:_dl_start        \n"
+-"       ldr	%w0, 1f				\n"
++#else
++"	add	%w1, %w1, #:lo12:_dl_start       \n"
++#endif
++"	ldr	%w0, 1f				\n"
+ "	b	2f				\n"
+ "1:						\n"
++#ifdef __LP64__
+ "	.word	_dl_start			\n"
++#else
++# ifdef __AARCH64EB__
++"	.short  0                               \n"
++# endif
++"	.short  _dl_start                       \n"
++# ifndef __AARCH64EB__
++"	.short  0                               \n"
++# endif
++#endif
+ "2:						\n"
+     : "=r" (static_addr),  "=r" (dynamic_addr));
+   return dynamic_addr - static_addr;
+-- 
+1.9.3
+

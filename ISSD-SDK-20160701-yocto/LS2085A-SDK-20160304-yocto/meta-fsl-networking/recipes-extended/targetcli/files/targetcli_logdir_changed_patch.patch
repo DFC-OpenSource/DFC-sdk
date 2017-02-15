@@ -1,0 +1,11 @@
+--- targetcli-2.0rc1/scripts/targetcli	2015-09-30 11:25:20.920365737 +0530
++++ /tmp/targetcli-2.0rc1/scripts/targetcli	2015-09-30 11:13:46.660394934 +0530
+@@ -55,7 +55,7 @@
+     else:
+         is_root = False
+ 
+-    shell = TargetCLI('~/.targetcli')
++    shell = TargetCLI('/var/volatile/.targetcli')
+     shell.con.display("targetcli %s (rtslib %s)\n"
+                       "Copyright (c) 2011-2013 by Datera, Inc.\n"
+                       "All rights reserved."

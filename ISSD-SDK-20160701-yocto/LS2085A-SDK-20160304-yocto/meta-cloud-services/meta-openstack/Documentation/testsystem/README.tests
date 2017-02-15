@@ -1,0 +1,9 @@
+This test system enables the user to run different tests on the system.
+
+Multiple compute node testing can be performed as per: README.multi-compute
+
+Other tests described in Documentation.ND:
+ie.
+Ceph testing: Documentation.ND/README.ceph-openstack
+Swift/cinder: Documentation.ND/README.swift
+

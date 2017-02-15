@@ -1,0 +1,31 @@
+From ddc04ef2f9d74bfc65c008e691ba0955f415d3f9 Mon Sep 17 00:00:00 2001
+From: Keith Holman <Keith.Holman@windriver.com>
+Date: Fri, 13 Jun 2014 15:14:58 -0400
+Subject: [PATCH] barbican: handle white space in date strings
+
+Barbican tests fail because white space is not being properly parsed
+by the iso8601 python package.  This fix updates the barbican code to
+strip white space from the date string before passing it to the
+iso8601 package for parsing.
+
+Signed-off-by: Keith Holman <Keith.Holman@windriver.com>
+---
+ barbican/openstack/common/timeutils.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/barbican/openstack/common/timeutils.py b/barbican/openstack/common/timeutils.py
+index 52688a0..497f00e 100644
+--- a/barbican/openstack/common/timeutils.py
++++ b/barbican/openstack/common/timeutils.py
+@@ -46,7 +46,7 @@ def isotime(at=None, subsecond=False):
+ def parse_isotime(timestr):
+     """Parse time from ISO 8601 format."""
+     try:
+-        return iso8601.parse_date(timestr)
++        return iso8601.parse_date(timestr.strip())
+     except iso8601.ParseError as e:
+         raise ValueError(six.text_type(e))
+     except TypeError as e:
+-- 
+1.9.3
+

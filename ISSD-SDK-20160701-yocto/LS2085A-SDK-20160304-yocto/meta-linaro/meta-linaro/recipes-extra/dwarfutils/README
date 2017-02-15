@@ -1,0 +1,18 @@
+Patches were submitted upstream and the answer was:
+
+---------
+Yes, I assume host == build  in all releases to date.  AFAIK you are the
+first to try a canadian-cross build.
+
+Another issue  is that the build is not set up to do the build anywhere
+but inside the source tree.  It is true that make-clean/CLEANUP fixes up
+the mess pretty well, but a separate build directory would be a nice
+(and traditional) thing to allow.
+
+I cannot use your submission for anything (Linaro and I have no
+agreement in place) but  I think these are interesting and worthwhile
+small issues that libdwarf/dwarfdump should be able to deal with.
+
+Thanks for the suggestion.  I made a note and should be able to take a
+look at this issue in the near future. 
+---------

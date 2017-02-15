@@ -1,0 +1,29 @@
+From e98b5737a61b676cba5f8935d56839e1f36faddf Mon Sep 17 00:00:00 2001
+From: Mark Asselstine <mark.asselstine@windriver.com>
+Date: Wed, 14 May 2014 09:05:35 -0400
+Subject: [PATCH] gemspec: bump version
+
+When the release was tagged the version bump was missed in the
+gemspec file.
+
+Signed-off-by: Mark Asselstine <mark.asselstine@windriver.com>
+---
+ method_source.gemspec | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/method_source.gemspec b/method_source.gemspec
+index d24b3d9..75e3b5b 100644
+--- a/method_source.gemspec
++++ b/method_source.gemspec
+@@ -2,7 +2,7 @@
+ 
+ Gem::Specification.new do |s|
+   s.name = "method_source"
+-  s.version = "0.8.1"
++  s.version = "0.8.2"
+ 
+   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
+   s.authors = ["John Mair (banisterfiend)"]
+-- 
+1.8.3.2
+

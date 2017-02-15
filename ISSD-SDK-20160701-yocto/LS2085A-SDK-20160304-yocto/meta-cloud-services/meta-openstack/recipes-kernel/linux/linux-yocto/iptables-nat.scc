@@ -1,0 +1,4 @@
+define KFEATURE_DESCRIPTION "Enable iptables nat"
+define KFEATURE_COMPATIBILITY board
+
+kconf non-hardware iptables-nat.cfg

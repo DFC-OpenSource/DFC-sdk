@@ -1,0 +1,36 @@
+From f28a381b58516018ca35cdf7b4e2879a5bcac6ad Mon Sep 17 00:00:00 2001
+From: Thomas Maddox <thomas.maddox@rackspace.com>
+Date: Mon, 21 Oct 2013 15:55:49 +0000
+Subject: [PATCH 1/2] Fix for get_resources with postgresql
+
+Add max_ts and min_ts to GROUP BY in sub-query, since they need to be aggregated to SELECT them.
+
+Closes-Bug: #1241526
+Change-Id: Ifdd2bc661b5da31bd40d1c3fa1fc442d7417399f
+(cherry picked from commit 0a98159bc9c727a89bd8c15347ac380a21acaa59)
+
+Signed-off-by: Bruce Ashfield <bruce.ashfield@windriver.com>
+---
+ ceilometer/storage/impl_sqlalchemy.py |    6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/ceilometer/storage/impl_sqlalchemy.py b/ceilometer/storage/impl_sqlalchemy.py
+index a6e7d307e407..546c0c0e6553 100644
+--- a/ceilometer/storage/impl_sqlalchemy.py
++++ b/ceilometer/storage/impl_sqlalchemy.py
+@@ -361,7 +361,11 @@ class Connection(base.Connection):
+         ).filter(
+             Meter.resource_id == ts_subquery.c.resource_id,
+             Meter.timestamp == ts_subquery.c.max_ts
+-        ).group_by(Meter.resource_id).subquery()
++        ).group_by(
++            ts_subquery.c.resource_id,
++            ts_subquery.c.max_ts,
++            ts_subquery.c.min_ts
++        ).subquery()
+ 
+         query = session.query(
+             Meter,
+-- 
+1.7.10.4
+

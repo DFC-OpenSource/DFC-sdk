@@ -1,0 +1,63 @@
+From d5310139d3f7e247552433cb046b4d608bb771dd Mon Sep 17 00:00:00 2001
+From: Keith Holman <Keith.Holman@windriver.com>
+Date: Wed, 25 Jun 2014 14:40:13 -0400
+Subject: [PATCH] neutronclient: use csv flag instead of json
+
+The tests included with neutronclient are calling neutron commands
+agents-list and net-list with the "-f" flag set to "json".  This isn't
+supported and throws an exception during the test.  The exception is
+unexpected and fails to free the resources allocated by the mox
+testing library causing the following tests to fail.  This patch
+prevents the exception from being thrown by calling the commands with
+the "-f" flag set to "csv", which is supported.
+
+Signed-off-by: Keith Holman <Keith.Holman@windriver.com>
+---
+ neutronclient/tests/unit/test_cli20_agents.py  | 4 ++--
+ neutronclient/tests/unit/test_cli20_network.py | 4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+Index: git/neutronclient/tests/unit/test_cli20_agents.py
+===================================================================
+--- git.orig/neutronclient/tests/unit/test_cli20_agents.py
++++ git/neutronclient/tests/unit/test_cli20_agents.py
+@@ -25,7 +25,7 @@
+     def test_list_agents(self):
+         contents = {'agents': [{'id': 'myname', 'agent_type': 'mytype',
+                                 'alive': True}]}
+-        args = ['-f', 'json']
++        args = ['-f', 'csv']
+         resources = "agents"
+ 
+         cmd = agent.ListAgent(test_cli20.MyApp(sys.stdout), None)
+@@ -40,7 +40,7 @@
+ 
+     def test_list_agents_field(self):
+         contents = {'agents': [{'alive': True}]}
+-        args = ['-f', 'json']
++        args = ['-f', 'csv']
+         resources = "agents"
+         smile = ':-)'
+ 
+Index: git/neutronclient/tests/unit/test_cli20_network.py
+===================================================================
+--- git.orig/neutronclient/tests/unit/test_cli20_network.py
++++ git/neutronclient/tests/unit/test_cli20_network.py
+@@ -267,7 +267,7 @@
+                                  fields_1=['a', 'b'], fields_2=['c', 'd'])
+ 
+     def _test_list_nets_columns(self, cmd, returned_body,
+-                                args=('-f', 'json')):
++                                args=('-f', 'csv')):
+         resources = 'networks'
+         self.mox.StubOutWithMock(network.ListNetwork, "extend_list")
+         network.ListNetwork.extend_list(mox.IsA(list), mox.IgnoreArg())
+@@ -280,7 +280,7 @@
+                                        "tenant_id": "tenant_3",
+                                        "subnets": []}]}
+         self._test_list_nets_columns(cmd, returned_body,
+-                                     args=['-f', 'json', '-c', 'id'])
++                                     args=['-f', 'csv', '-c', 'id'])
+         _str = self.fake_stdout.make_string()
+         returned_networks = jsonutils.loads(_str)
+         self.assertEqual(1, len(returned_networks))

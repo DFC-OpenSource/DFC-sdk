@@ -1,0 +1,161 @@
+--- install.pl	2010-09-21 21:23:11.000000000 +0530
++++ install.pl	2015-06-23 17:20:05.000000000 +0530
+@@ -35,10 +35,10 @@
+ use Term::ANSIColor qw(:constants);
+ use sigtrap 'handler', \&sig_handler, 'normal-signals';
+ 
+-if ($<) {
+-    print RED "Only root can run $0", RESET "\n";
+-    exit 1;
+-}
++#if ($<) {
++#    print RED "Only root can run $0", RESET "\n";
++#    exit 1;
++#}
+ 
+ $| = 1;
+ my $LOCK_EXCLUSIVE = 2;
+@@ -77,7 +77,8 @@
+ my $rpminstall_flags = "";
+ 
+ my $build32 = 0;
+-my $arch = `uname -m`;
++#my $arch = `uname -m`;
++my $arch = 'arm';
+ chomp $arch;
+ my $kernel = `uname -r`;
+ chomp $kernel;
+@@ -324,7 +325,7 @@
+                         "libibverbs", "libibverbs-devel", "libibverbs-utils",
+                         "libipathverbs", "libipathverbs-devel", "libmthca",
+                         "libmthca-devel", "libmlx4", "libmlx4-devel",
+-                        "libsdp", "librdmacm", "librdmacm-devel", "librdmacm-utils", "ibacm",
++                        "libsdp", "librdmacm", "librdmacm-devel", "librdmacm-utils", "ibacm", "librxe",
+                         "openib-diags", "openib-mstflint", "openib-perftest", "openib-srptools", "openib-tvflash",
+                         "openmpi", "openmpi-devel", "openmpi-libs",
+                         "ibutils", "ibutils-devel", "ibutils-libs", "ibutils2", "ibutils2-devel",
+@@ -1002,7 +1003,7 @@
+             available => 1, mode => "user", dist_req_build => ["tcl_8.4", "tcl-devel_8.4", "tk", "$libstdc_devel"],
+             dist_req_inst => ["tcl_8.4", "tk", "$libstdc"], ofa_req_build => ["libibverbs-devel", "opensm-libs", "opensm-devel"],
+             ofa_req_inst => ["libibumad", "opensm-libs"],
+-            install32 => 0, exception => 0, configure_options => '' },
++            install32 => 0, exception => 0, configure_options => "--with-tk-lib" },
+         'ibutils-debuginfo' =>
+             { name => "ibutils-debuginfo", parent => "ibutils",
+             selected => 0, installed => 0, rpm_exist => 0, rpm_exist32 => 0,
+@@ -1075,6 +1076,14 @@
+             dist_req_inst => [], ofa_req_build => ["libibverbs","libibverbs-devel", "librdmacm", "librdmacm-devel"],
+             ofa_req_inst => [],
+             install32 => 0, exception => 0 },
++#vvdn addition
++        'librxe' =>
++            { name => "librxe" , parent => "librxe" , 
++            selected => 0, installed => 0, rpm_exist => 0, rpm_exist32 => 0,
++            available => 1, mode => "user", dist_req_build => ["tcsh"],
++            dist_req_inst => ["tcsh"], ofa_req_build => [],
++            ofa_req_inst => [],
++            install32 => 0, exception => 0, configure_options => '' },
+ 
+         'mpi-selector' =>
+             { name => "mpi-selector", parent => "mpi-selector",
+@@ -1545,7 +1554,11 @@
+ 
+ if (not $check_linux_deps) {
+     $rpmbuild_flags .= ' --nodeps';
+-    $rpminstall_flags .= ' --nodeps';
++    #$rpminstall_flags .= ' --nodeps --dbpath /tmp/mypath123456';
++    $rpminstall_flags .= ' --nodeps --dbpath ';
++	$rpminstall_flags .= $prefix;
++	$rpminstall_flags .= '/../ofed_tmp_rpmdb';
++
+ }
+ 
+ sub sig_handler
+@@ -2112,7 +2125,8 @@
+         my $max_inp;
+         while (! $ok) {
+             $max_inp = show_menu("select");
+-            $inp = getch();
++            #$inp = getch();
++            $inp = 2;
+             if ($inp =~ m/[qQ]/ || $inp =~ m/[Xx]/ ) {
+                 die "Exiting\n";
+             }
+@@ -2972,7 +2986,8 @@
+     $cmd .= " --define '_prefix $prefix'";
+     $cmd .= " --define 'dist %{nil}'";
+     $cmd .= " --define '_exec_prefix $prefix'";
+-    $cmd .= " --define '_sysconfdir $sysconfdir'";
++    #$cmd .= " --define '_sysconfdir $sysconfdir'";
++    $cmd .= " --define '_sysconfdir $prefix/etc/'";
+     $cmd .= " --define '_usr $prefix'";
+     $cmd .= " --define '_lib lib'";
+     $cmd .= " --define '__arch_install_post %{nil}'";
+@@ -2982,7 +2997,8 @@
+         chomp $def_doc_dir;
+         $cmd .= " --define '_prefix $prefix'";
+         $cmd .= " --define '_exec_prefix $prefix'";
+-        $cmd .= " --define '_sysconfdir $sysconfdir'";
++        #$cmd .= " --define '_sysconfdir $sysconfdir'";
++        $cmd .= " --define '_sysconfdir $prefix/etc'";
+         $cmd .= " --define '_defaultdocdir $def_doc_dir/$main_packages{$parent}{'name'}-$main_packages{$parent}{'version'}'";
+         $cmd .= " --define '_usr $prefix'";
+     }
+@@ -3105,13 +3121,16 @@
+         $cmd = "$pref_env rpmbuild --rebuild $rpmbuild_flags --define '_topdir $TOPDIR'";
+         $cmd .= " --define 'dist %{nil}'";
+         $cmd .= " --target $target_cpu";
++    	$cmd .= " --define '_host arm-linux'";
++    	$cmd .= " --define '_build x86'";
+ 
+         # Prefix should be defined per package
+         if ($parent eq "ibutils") {
+             $packages_info{'ibutils'}{'configure_options'} .= " --with-osm=$prefix";
+             $cmd .= " --define '_prefix $prefix'";
+             $cmd .= " --define '_exec_prefix $prefix'";
+-            $cmd .= " --define '_sysconfdir $sysconfdir'";
++            #$cmd .= " --define '_sysconfdir $sysconfdir'";
++            $cmd .= " --define '_sysconfdir $prefix/etc'";
+             $cmd .= " --define '_usr $prefix'";
+             $cmd .= " --define 'build_ibmgtsim 1'";
+             $cmd .= " --define '__arch_install_post %{nil}'";
+@@ -3374,7 +3393,8 @@
+         elsif ($parent eq "mpi-selector") {
+             $cmd .= " --define '_prefix $prefix'";
+             $cmd .= " --define '_exec_prefix $prefix'";
+-            $cmd .= " --define '_sysconfdir $sysconfdir'";
++            #$cmd .= " --define '_sysconfdir $sysconfdir'";
++            $cmd .= " --define '_sysconfdir $prefix/etc'";
+             $cmd .= " --define '_usr $prefix'";
+             $cmd .= " --define 'shell_startup_dir /etc/profile.d'";
+         }
+@@ -3383,7 +3403,8 @@
+             chomp $def_doc_dir;
+             $cmd .= " --define '_prefix $prefix'";
+             $cmd .= " --define '_exec_prefix $prefix'";
+-            $cmd .= " --define '_sysconfdir $sysconfdir'";
++            #$cmd .= " --define '_sysconfdir $sysconfdir'";
++            $cmd .= " --define '_sysconfdir $prefix/etc'";
+             $cmd .= " --define '_defaultdocdir $def_doc_dir/$main_packages{$parent}{'name'}-$main_packages{$parent}{'version'}'";
+             $cmd .= " --define '_usr $prefix'";
+         }
+@@ -3401,7 +3422,8 @@
+         else {
+             $cmd .= " --define '_prefix $prefix'";
+             $cmd .= " --define '_exec_prefix $prefix'";
+-            $cmd .= " --define '_sysconfdir $sysconfdir'";
++            #$cmd .= " --define '_sysconfdir $sysconfdir'";
++            $cmd .= " --define '_sysconfdir $prefix/etc'";
+             $cmd .= " --define '_usr $prefix'";
+         }
+ 
+@@ -4298,7 +4320,8 @@
+     
+         while (! $ok) {
+             $max_inp = show_menu("main");
+-            $inp = getch();
++            #$inp = getch();
++            $inp = 2;
+     
+             if ($inp =~ m/[qQ]/ || $inp =~ m/[Xx]/ ) {
+                 die "Exiting\n";

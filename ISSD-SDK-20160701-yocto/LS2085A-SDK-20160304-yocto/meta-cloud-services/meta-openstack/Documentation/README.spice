@@ -1,0 +1,82 @@
+OpenStack offers two types of console support, VNC support and SPICE.
+The VNC protocol is fairly limited, lacking support for multiple monitors,
+bi-directional audio, reliable cut+paste, video streaming and more.
+SPICE is a new protocol which aims to address all the limitations in VNC,
+to provide good remote desktop support.
+
+The Controller will have both the proxy for vnc and for spice html5
+running. The nova-spicehtml5proxy service communicates directly with
+the hypervisor process using SPICE.
+
+OpenStack's Dashboard uses a SPICE HTML5 widget in its console tab 
+to communicate with the nova-spicehtml5proxy service. Since both proxies
+are running, the Dashboard will automatically attempt to connect to
+whichever console is provided by the compute node.
+
+Another way to access the spice console is from the controller,
+run the following command:
+
+	nova get-spice-console myinstance spice-html5
+
+This will give you an URL which will directly give you access to the console
+(instead of from Horizon).
+
+The enable or disable VNC/SPICE, on the compute node, modify
+/etc/nova/nova.conf.
+
+Options for configuring SPICE as the console for OpenStack Compute can be
+ found below.
+
+---------------------------------------------------------------------------------
+ Configuration option=Default value	(Type) Description
+
+ agent_enabled=True			(BoolOpt)enable spice guest agent support
+
+ enabled=False				(BoolOpt)enable spice related features
+
+ html5proxy_base_url=http://127.0.0.1:6080/spice_auto.html
+ 					(StrOpt)location of spice html5 
+					console proxy, in the form 
+					"http://127.0.0.1:6080/spice_auto.html"
+
+ keymap=en-us				(StrOpt)keymap for spice
+
+ server_listen=127.0.0.1		(StrOpt)IP address on which instance
+ 					spice
+ server should listen
+
+ server_proxyclient_address=127.0.0.1	(StrOpt)the address to which proxy
+ 					clients (like nova-spicehtml5proxy) 
+					should connect
+---------------------------------------------------------------------------------
+
+Combinations/behaviour from Compute:
+
+1. VNC will be provided
+
+vnc_enabled=True
+enabled=True
+agent_enabled=True
+
+2. SPICE will be provided
+
+vnc_enabled=False
+enabled=True
+agent_enabled=True
+
+3. VNC will be provided
+
+vnc_enabled=True
+enabled=False
+agent_enabled=False
+
+4. No console will be provided
+
+vnc_enabled=False
+enabled=False
+agent_enabled=False
+
+After nova.conf is changed on the compute node, restart nova-compute
+service. If an instance was running beforehand, it will be necessary to
+restart (reboot, soft or hard) the instance to get the new console.
+

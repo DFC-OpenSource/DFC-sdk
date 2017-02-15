@@ -1,0 +1,382 @@
+Networking - VLAN network
+=========================
+
+Description
+-----------
+The vlan network will have the VMs on one of two vlan networks
+(DMZ_SUBNET - 172.16.0.0/24, INSIDE_SUBNET - 192.168.100.0/241). We
+will continue to use the management network (192.168.7.0/24) for
+controller/compute communications. The dhcp-agent will provide the VMs
+addresses within each subnet and within its provisioned ranges. This
+type of network is more typical of a deployed network since network
+traffic can be contained to within the assigned vlan.
+
+
+Assumptions
+-----------
+It is assumed you have completed the steps described in
+README.networking and have provisioned the host vSwitch as well as
+created the br-eth0 bridges on the controller and compute nodes.
+
+At this point you should be able to ping 192.168.7.4 from 192.168.7.4
+and vise versa.
+
+You have built your controller image including the cirros image (for
+which you have already added the image to glance as myFirstImage).
+
+You have run 'source /etc/nova/openrc'
+
+Configuration updates
+---------------------
+On the host Open vSwitch add an IP for 192.168.100.1/22
+sudo ip address add 192.168.100.1/24 broadcast 192.168.100.255 dev br-int
+sudo ip address add 172.16.0.1/24 broadcast 172.16.0.255 dev br-int
+
+On the controller and (all) compute nodes you must edit the file
+/etc/neutron/plugins/openvswitch/ovs_neutron_plugin.ini
+
+In the [OVS] section set
+network_vlan_ranges = ph-eth0:200:200,ph-eth0:300:300
+bridge_mappings = ph-eth0:br-eth0
+
+(*** on compute nodes edit local_ip as well [192.168.7.4]***)
+
+Restart some services to allow these changes to take effect:
+/etc/init.d/neutron-openvswitch-agent reload
+(on controller)
+/etc/init.d/neutron-server reload
+/etc/init.d/neutron-dhcp-agent reload
+(on compute)
+/etc/init.d/nova-compute reload
+
+
+Create the net and subnet
+-------------------------
+neutron net-create --provider:physical_network=ph-eth0 \
+  --provider:network_type=vlan --provider:segmentation_id=200 \
+  --shared INSIDE_NET
+Created a new network:
++---------------------------+--------------------------------------+
+| Field                     | Value                                |
++---------------------------+--------------------------------------+
+| admin_state_up            | True                                 |
+| id                        | 587e29d0-eb89-4c0d-948b-845009380097 |
+| name                      | INSIDE_NET                           |
+| provider:network_type     | vlan                                 |
+| provider:physical_network | ph-eth0                              |
+| provider:segmentation_id  | 200                                  |
+| shared                    | True                                 |
+| status                    | ACTIVE                               |
+| subnets                   |                                      |
+| tenant_id                 | b5890ba3fb234347ae317ca2f8358663     |
++---------------------------+--------------------------------------+
+
+neutron net-create --provider:physical_network=ph-eth0 \
+  --provider:network_type=vlan --provider:segmentation_id=300 \
+  --shared DMZ_NET
+Created a new network:
++---------------------------+--------------------------------------+
+| Field                     | Value                                |
++---------------------------+--------------------------------------+
+| admin_state_up            | True                                 |
+| id                        | 498fa1f2-87de-4874-8ca9-f4ba3e394d2a |
+| name                      | DMZ_NET                              |
+| provider:network_type     | vlan                                 |
+| provider:physical_network | ph-eth0                              |
+| provider:segmentation_id  | 300                                  |
+| shared                    | True                                 |
+| status                    | ACTIVE                               |
+| subnets                   |                                      |
+| tenant_id                 | b5890ba3fb234347ae317ca2f8358663     |
++---------------------------+--------------------------------------+
+
+neutron subnet-create INSIDE_NET 192.168.100.0/24 \
+  --name INSIDE_SUBNET --no-gateway \
+  --host-route destination=0.0.0.0/0,nexthop=192.168.100.1 \
+  --allocation-pool start=192.168.100.100,end=192.168.100.199
+Created a new subnet:
++------------------+----------------------------------------------------------+
+| Field            | Value                                                    |
++------------------+----------------------------------------------------------+
+| allocation_pools | {"start": "192.168.100.100", "end": "192.168.100.199"}   |
+| cidr             | 192.168.100.0/24                                         |
+| dns_nameservers  |                                                          |
+| enable_dhcp      | True                                                     |
+| gateway_ip       |                                                          |
+| host_routes      | {"destination": "0.0.0.0/0", "nexthop": "192.168.100.1"} |
+| id               | 2c1a77aa-614c-4a97-9855-a62bb4b4d899                     |
+| ip_version       | 4                                                        |
+| name             | INSIDE_SUBNET                                            |
+| network_id       | 587e29d0-eb89-4c0d-948b-845009380097                     |
+| tenant_id        | b5890ba3fb234347ae317ca2f8358663                         |
++------------------+----------------------------------------------------------+
+
+neutron subnet-create DMZ_NET 172.16.0.0/24 --name DMZ_SUBNET \
+  --no-gateway --host-route destination=0.0.0.0/0,nexthop=172.16.0.1 \
+  --allocation-pool start=172.16.0.100,end=172.16.0.199
+Created a new subnet:
++------------------+-------------------------------------------------------+
+| Field            | Value                                                 |
++------------------+-------------------------------------------------------+
+| allocation_pools | {"start": "172.16.0.100", "end": "172.16.0.199"}      |
+| cidr             | 172.16.0.0/24                                         |
+| dns_nameservers  |                                                       |
+| enable_dhcp      | True                                                  |
+| gateway_ip       |                                                       |
+| host_routes      | {"destination": "0.0.0.0/0", "nexthop": "172.16.0.1"} |
+| id               | bfae1a19-e15f-4e5e-94f2-018f24abbc2e                  |
+| ip_version       | 4                                                     |
+| name             | DMZ_SUBNET                                            |
+| network_id       | 498fa1f2-87de-4874-8ca9-f4ba3e394d2a                  |
+| tenant_id        | b5890ba3fb234347ae317ca2f8358663                      |
++------------------+-------------------------------------------------------+
+
+
+Boot the image and test connectivity
+------------------------------------
+(note with our current config you might only be able to run 2 instances at
+ any one time, so you will end up juggling them to test connectivity)
+
+nova boot --flavor=m1.small --image=myFirstImage \
+  --nic net-id=587e29d0-eb89-4c0d-948b-845009380097 INSIDE_INSTANCE
++--------------------------------------+-----------------------------------------------------+
+| Property                             | Value                                               |
++--------------------------------------+-----------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                              |
+| OS-EXT-AZ:availability_zone          | nova                                                |
+| OS-EXT-SRV-ATTR:host                 | -                                                   |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | -                                                   |
+| OS-EXT-SRV-ATTR:instance_name        | instance-00000009                                   |
+| OS-EXT-STS:power_state               | 0                                                   |
+| OS-EXT-STS:task_state                | scheduling                                          |
+| OS-EXT-STS:vm_state                  | building                                            |
+| OS-SRV-USG:launched_at               | -                                                   |
+| OS-SRV-USG:terminated_at             | -                                                   |
+| accessIPv4                           |                                                     |
+| accessIPv6                           |                                                     |
+| adminPass                            | 7itgDwsdY8d4                                        |
+| config_drive                         |                                                     |
+| created                              | 2014-04-10T14:31:21Z                                |
+| flavor                               | m1.small (2)                                        |
+| hostId                               |                                                     |
+| id                                   | 630affe0-d497-4211-87bb-383254d60428                |
+| image                                | myFirstImage (f22d3ab8-96a5-46db-a029-7d59156c8e31) |
+| key_name                             | -                                                   |
+| metadata                             | {}                                                  |
+| name                                 | INSIDE_INSTANCE                                     |
+| os-extended-volumes:volumes_attached | []                                                  |
+| progress                             | 0                                                   |
+| security_groups                      | default                                             |
+| status                               | BUILD                                               |
+| tenant_id                            | b5890ba3fb234347ae317ca2f8358663                    |
+| updated                              | 2014-04-10T14:31:21Z                                |
+| user_id                              | 1dfcb72ef6a7428d8dd7300bc7f303d9                    |
++--------------------------------------+-----------------------------------------------------+
+
+nova boot --flavor=m1.small --image=myFirstImage \
+  --nic net-id=587e29d0-eb89-4c0d-948b-845009380097 INSIDE_INSTANCE2
++--------------------------------------+-----------------------------------------------------+
+| Property                             | Value                                               |
++--------------------------------------+-----------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                              |
+| OS-EXT-AZ:availability_zone          | nova                                                |
+| OS-EXT-SRV-ATTR:host                 | -                                                   |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | -                                                   |
+| OS-EXT-SRV-ATTR:instance_name        | instance-0000000a                                   |
+| OS-EXT-STS:power_state               | 0                                                   |
+| OS-EXT-STS:task_state                | scheduling                                          |
+| OS-EXT-STS:vm_state                  | building                                            |
+| OS-SRV-USG:launched_at               | -                                                   |
+| OS-SRV-USG:terminated_at             | -                                                   |
+| accessIPv4                           |                                                     |
+| accessIPv6                           |                                                     |
+| adminPass                            | BF9p6tftS2xJ                                        |
+| config_drive                         |                                                     |
+| created                              | 2014-04-10T14:32:07Z                                |
+| flavor                               | m1.small (2)                                        |
+| hostId                               |                                                     |
+| id                                   | ff94ee07-ae24-4785-9d51-26de2c23da60                |
+| image                                | myFirstImage (f22d3ab8-96a5-46db-a029-7d59156c8e31) |
+| key_name                             | -                                                   |
+| metadata                             | {}                                                  |
+| name                                 | INSIDE_INSTANCE2                                    |
+| os-extended-volumes:volumes_attached | []                                                  |
+| progress                             | 0                                                   |
+| security_groups                      | default                                             |
+| status                               | BUILD                                               |
+| tenant_id                            | b5890ba3fb234347ae317ca2f8358663                    |
+| updated                              | 2014-04-10T14:32:08Z                                |
+| user_id                              | 1dfcb72ef6a7428d8dd7300bc7f303d9                    |
++--------------------------------------+-----------------------------------------------------+
+
+root@controller:~# nova list
++--------------------------------------+------------------+--------+------------+-------------+----------------------------+
+| ID                                   | Name             | Status | Task State | Power State | Networks                   |
++--------------------------------------+------------------+--------+------------+-------------+----------------------------+
+| 630affe0-d497-4211-87bb-383254d60428 | INSIDE_INSTANCE  | ACTIVE | -          | Running     | INSIDE_NET=192.168.100.100 |
+| ff94ee07-ae24-4785-9d51-26de2c23da60 | INSIDE_INSTANCE2 | ACTIVE | -          | Running     | INSIDE_NET=192.168.100.102 |
++--------------------------------------+------------------+--------+------------+-------------+----------------------------+
+
+nova boot --flavor=m1.small --image=myFirstImage \
+  --nic net-id=498fa1f2-87de-4874-8ca9-f4ba3e394d2a DMZ_INSTANCE
++--------------------------------------+-----------------------------------------------------+
+| Property                             | Value                                               |
++--------------------------------------+-----------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                              |
+| OS-EXT-AZ:availability_zone          | nova                                                |
+| OS-EXT-SRV-ATTR:host                 | -                                                   |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | -                                                   |
+| OS-EXT-SRV-ATTR:instance_name        | instance-0000000d                                   |
+| OS-EXT-STS:power_state               | 0                                                   |
+| OS-EXT-STS:task_state                | scheduling                                          |
+| OS-EXT-STS:vm_state                  | building                                            |
+| OS-SRV-USG:launched_at               | -                                                   |
+| OS-SRV-USG:terminated_at             | -                                                   |
+| accessIPv4                           |                                                     |
+| accessIPv6                           |                                                     |
+| adminPass                            | SvzSpnmB6mXJ                                        |
+| config_drive                         |                                                     |
+| created                              | 2014-04-10T14:42:53Z                                |
+| flavor                               | m1.small (2)                                        |
+| hostId                               |                                                     |
+| id                                   | 0dab2712-5f1d-4559-bfa4-d09c6304418c                |
+| image                                | myFirstImage (f22d3ab8-96a5-46db-a029-7d59156c8e31) |
+| key_name                             | -                                                   |
+| metadata                             | {}                                                  |
+| name                                 | DMZ_INSTANCE                                        |
+| os-extended-volumes:volumes_attached | []                                                  |
+| progress                             | 0                                                   |
+| security_groups                      | default                                             |
+| status                               | BUILD                                               |
+| tenant_id                            | b5890ba3fb234347ae317ca2f8358663                    |
+| updated                              | 2014-04-10T14:42:54Z                                |
+| user_id                              | 1dfcb72ef6a7428d8dd7300bc7f303d9                    |
++--------------------------------------+-----------------------------------------------------+
+
+nova boot --flavor=m1.small --image=myFirstImage \
+  --nic net-id=498fa1f2-87de-4874-8ca9-f4ba3e394d2a DMZ_INSTANCE2
+...
+
+nova console-log INSIDE_INSTANCE2
+---
+...skip
+Starting network...
+udhcpc (v1.18.5) started
+Sending discover...
+Sending select for 192.168.100.102...
+...skip
+
+ping
+---
+
+You should also be able to ping instances on the same subnet but not
+those on the other subnet. The controller and compute can not ping
+instances on either network (with metadata implemented the controller
+should be able to, but currently the metadata agent is not available.)
+
+dump-flows
+----------
+(note the 'vlan' tags)
+root@compute:~# ovs-ofctl dump-flows br-int
+NXST_FLOW reply (xid=0x4):
+ cookie=0x0, duration=1640.378s, table=0, n_packets=3, n_bytes=788, idle_age=1628, priority=3,in_port=6,dl_vlan=300 actions=mod_vlan_vid:2,NORMAL
+ cookie=0x0, duration=2332.714s, table=0, n_packets=6, n_bytes=1588, idle_age=2274, priority=3,in_port=6,dl_vlan=200 actions=mod_vlan_vid:1,NORMAL
+ cookie=0x0, duration=2837.737s, table=0, n_packets=22, n_bytes=1772, idle_age=1663, priority=2,in_port=6 actions=drop
+ cookie=0x0, duration=2837.976s, table=0, n_packets=53, n_bytes=5038, idle_age=1535, priority=1 actions=NORMAL
+
+
+
+The final Open vSwitch configs
+------------------------------
+
+Controller
+---
+root@controller:~# ovs-vsctl show
+524a6c84-226d-427b-8efa-732ed7e7fa43
+    Bridge br-tun
+        Port "gre-2"
+            Interface "gre-2"
+                type: gre
+                options: {in_key=flow, local_ip="192.168.7.2", out_key=flow, remote_ip="192.168.7.4"}
+        Port br-tun
+            Interface br-tun
+                type: internal
+        Port patch-int
+            Interface patch-int
+                type: patch
+                options: {peer=patch-tun}
+    Bridge "br-eth0"
+        Port "eth0"
+            Interface "eth0"
+        Port "br-eth0"
+            Interface "br-eth0"
+                type: internal
+        Port "phy-br-eth0"
+            Interface "phy-br-eth0"
+    Bridge br-int
+        Port patch-tun
+            Interface patch-tun
+                type: patch
+                options: {peer=patch-int}
+        Port "tapafbbdd15-e7"
+            tag: 1
+            Interface "tapafbbdd15-e7"
+                type: internal
+        Port "int-br-eth0"
+            Interface "int-br-eth0"
+        Port "tapa50c1a18-34"
+            tag: 2
+            Interface "tapa50c1a18-34"
+                type: internal
+        Port br-int
+            Interface br-int
+                type: internal
+    ovs_version: "2.0.0"
+
+
+Compute
+---
+root@compute:~# ovs-vsctl show
+99d365d2-f74e-40a8-b9a0-5bb60353675d
+    Bridge br-tun
+        Port br-tun
+            Interface br-tun
+                type: internal
+        Port "gre-1"
+            Interface "gre-1"
+                type: gre
+                options: {in_key=flow, local_ip="192.168.7.4", out_key=flow, remote_ip="192.168.7.2"}
+        Port patch-int
+            Interface patch-int
+                type: patch
+                options: {peer=patch-tun}
+    Bridge br-int
+        Port br-int
+            Interface br-int
+                type: internal
+        Port "int-br-eth0"
+            Interface "int-br-eth0"
+        Port patch-tun
+            Interface patch-tun
+                type: patch
+                options: {peer=patch-int}
+        Port "tap78e1ac37-6c"
+            tag: 2
+            Interface "tap78e1ac37-6c"
+        Port "tap315398a4-cd"
+            tag: 1
+            Interface "tap315398a4-cd"
+    Bridge "br-eth0"
+        Port "phy-br-eth0"
+            Interface "phy-br-eth0"
+        Port "eth0"
+            Interface "eth0"
+        Port "br-eth0"
+            Interface "br-eth0"
+                type: internal
+    ovs_version: "2.0.0"
+
+
+References
+----------
+http://developer.rackspace.com/blog/neutron-networking-vlan-provider-networks.html

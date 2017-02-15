@@ -1,0 +1,121 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:
+# Required-Start: $remote_fs $network $syslog
+# Required-Stop: $remote_fs $syslog
+# Default-Start:     3 5
+# Default-Stop:      0 1 2 6
+# Short-Description: Heat Servers
+# Description: OpenStack Orchestration Service (code-named heat)
+### END INIT INFO
+
+SUFFIX="@suffix@"
+CONFIG="/etc/heat/heat.conf" 
+if [ -n "$SUFFIX" ]; then
+    DAEMON="/usr/bin/heat-$SUFFIX"
+    DESC="heat-$SUFFIX"
+    PIDFILE="/var/run/heat-$SUFFIX.pid"
+else
+    DAEMON="/usr/bin/heat"
+    DESC="heat"
+    PIDFILE="/var/run/heat.pid"
+fi
+
+start() 
+{
+    if [ -e $PIDFILE ]; then
+        PIDDIR=/proc/$(cat $PIDFILE)
+        if [ -d ${PIDDIR} ]; then
+            echo "$DESC already running."
+            exit 1
+        else
+            echo "Removing stale PID file $PIDFILE"
+            rm -f $PIDFILE
+        fi
+    fi
+
+    if [ ! -d /var/log/heat ]; then
+        mkdir /var/log/heat
+    fi
+
+    echo -n "Starting $DESC..."
+
+    start-stop-daemon --start --quiet --background \
+        --pidfile ${PIDFILE} --make-pidfile --exec ${DAEMON} \
+	-- --config-file $CONFIG --log-dir=/var/log/heat
+
+    if [ $? -eq 0 ]; then
+        echo "done."
+    else
+        echo "failed."
+    fi
+}
+
+stop() 
+{
+    echo -n "Stopping $DESC..."
+    start-stop-daemon --stop --quiet --pidfile $PIDFILE
+    if [ $? -eq 0 ]; then
+        echo "done."
+    else
+        echo "failed."
+    fi
+    rm -f $PIDFILE
+}
+
+status()
+{
+    pid=`cat $PIDFILE 2>/dev/null`
+    if [ -n "$pid" ]; then
+        if ps -p $pid > /dev/null 2>&1 ; then
+            echo "$DESC is running"
+            return
+        fi
+    fi
+    echo "$DESC is not running"
+}
+
+reset()
+{
+    stop
+
+    # This is to make sure postgres is configured and running
+    if ! pidof postmaster > /dev/null; then
+       /etc/init.d/postgresql-init
+       /etc/init.d/postgresql start
+       sleep 2
+    fi
+
+    [ ! -d /var/log/heat ] && mkdir /var/log/heat
+    sudo -u postgres dropdb heat
+    sudo -u postgres createdb heat
+    heat-manage db_sync
+
+    start
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart|force-reload|reload)
+        stop
+        start
+        ;;
+    status)
+	status
+        ;;
+    reset)
+	reset
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|force-reload|restart|reload|status|reset}"
+        exit 1
+        ;;
+esac
+
+exit 0

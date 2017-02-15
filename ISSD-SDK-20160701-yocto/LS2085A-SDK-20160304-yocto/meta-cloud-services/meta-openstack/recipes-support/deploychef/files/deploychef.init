@@ -1,0 +1,26 @@
+#!/bin/bash
+#After this script executes, it runs the 'run-openstackchef' script found in
+#/opt/deploychef/ directory. After that, all the 
+#configuration files that were registered with openstackchef class are
+#created using run-time environment variables and default values
+# found in /opt/deploychef/cookbooks/openstack/attributes/default.rb
+deploychef_root=%DEPLOYCHEF_ROOT_DIR%
+LOG_DIR=/var/log/%PACKAGE_NAME%
+LOG_FILE=$LOG_DIR/%PACKAGE_NAME%.log
+script_file=$deploychef_root/run-openstackchef
+chefsolo_success_file="%SYSCONFDIR%/chefsolo.ran"
+if [ ! -f $chefsolo_success_file ]; then
+    if [ -f $script_file ] ; then
+        mkdir -p $LOG_DIR
+        #Remove deploy init script if present
+        rm -f /etc/init.d/deploy 2>/dev/null
+        cd $deploychef_root
+        . $(basename $script_file)
+        if [ $? = 0 ]; then
+            echo "Deploychef successfully created chefsolo configuration files" \
+            > $LOG_FILE
+        else
+            echo "deploychef ERROR: $i failed." > $LOG_FILE 
+        fi
+    fi
+fi

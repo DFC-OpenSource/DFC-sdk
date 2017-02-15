@@ -1,0 +1,48 @@
+Make rbd.libvirt_info parent class compatible
+
+commit 7a34be0ec0cd0cb9555fe64ff6c486faae1ae91d from
+https://github.com/openstack/nova
+
+Rbd.libvirt_info function definition misses hypervisor_version argument added in change:
+https://review.openstack.org/32379
+
+Closes-Bug: #1233188
+Change-Id: Ib68d743e783af0f6d82d2ba180869ee642e86050
+
+diff --git a/nova/tests/virt/libvirt/test_imagebackend.py b/nova/tests/virt/libvirt/test_imagebackend.py
+index 2455ec8..5bfa94d 100644
+--- a/nova/tests/virt/libvirt/test_imagebackend.py
++++ b/nova/tests/virt/libvirt/test_imagebackend.py
+@@ -20,6 +20,8 @@ import os
+ import fixtures
+ from oslo.config import cfg
+ 
++from inspect import getargspec
++
+ from nova import exception
+ from nova.openstack.common import uuidutils
+ from nova import test
+@@ -630,6 +632,10 @@ class RbdTestCase(_ImageTestCase, test.NoDBTestCase):
+ 
+         self.assertEqual(fake_processutils.fake_execute_get_log(), [])
+ 
++    def test_parent_compatible(self):
++        self.assertEqual(getargspec(imagebackend.Image.libvirt_info),
++             getargspec(self.image_class.libvirt_info))
++
+ 
+ class BackendTestCase(test.NoDBTestCase):
+     INSTANCE = {'name': 'fake-instance',
+diff --git a/nova/virt/libvirt/imagebackend.py b/nova/virt/libvirt/imagebackend.py
+index e900789..51872cf 100644
+--- a/nova/virt/libvirt/imagebackend.py
++++ b/nova/virt/libvirt/imagebackend.py
+@@ -482,7 +482,7 @@ class Rbd(Image):
+         return hosts, ports
+ 
+     def libvirt_info(self, disk_bus, disk_dev, device_type, cache_mode,
+-            extra_specs):
++            extra_specs, hypervisor_version):
+         """Get `LibvirtConfigGuestDisk` filled for this image.
+ 
+         :disk_dev: Disk bus device name

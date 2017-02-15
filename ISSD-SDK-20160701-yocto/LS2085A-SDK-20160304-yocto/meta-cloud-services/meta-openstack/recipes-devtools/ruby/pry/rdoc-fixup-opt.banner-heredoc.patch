@@ -1,0 +1,69 @@
+From 40f78c9ae1c8f37e382d2da3498e1670c1a321dd Mon Sep 17 00:00:00 2001
+From: Li xin <lixin.fnst@cn.fujitsu.com>
+Date: Sat, 25 Jul 2015 03:13:50 +0900
+Subject: [PATCH] rdoc: fixup opt.banner heredoc
+
+rdoc has some quirks with heredoc which in this case would
+manifest in to a parse error.
+
+| RDoc::Parser::Ruby failure around line 25 of
+| lib/pry/commands/ls.rb
+
+Fixup the heredoc to use a more standard format which is known
+not to mess up rdoc processing.
+
+Signed-off-by: Mark Asselstine <mark.asselstine@windriver.com>
+Signed-off-by: Li Xin <lixin.fnst@cn.fujitsu.com>
+---
+ lib/pry/commands/ls.rb | 35 ++++++++++++++++-------------------
+ 1 file changed, 16 insertions(+), 19 deletions(-)
+
+diff --git a/lib/pry/commands/ls.rb b/lib/pry/commands/ls.rb
+index 9f0e68f..eda7a53 100644
+--- a/lib/pry/commands/ls.rb
++++ b/lib/pry/commands/ls.rb
+@@ -28,25 +28,22 @@ class Pry
+     description 'Show the list of vars and methods in the current scope.'
+     command_options :shellwords => false, :interpolate => false
+ 
+-    banner <<-'BANNER'
+-      Usage: ls [-m|-M|-p|-pM] [-q|-v] [-c|-i] [Object]
+-             ls [-g] [-l]
+-
+-      ls shows you which methods, constants and variables are accessible to Pry. By
+-      default it shows you the local variables defined in the current shell, and any
+-      public methods or instance variables defined on the current object.
+-
+-      The colours used are configurable using Pry.config.ls.*_color, and the separator
+-      is Pry.config.ls.separator.
+-
+-      Pry.config.ls.ceiling is used to hide methods defined higher up in the
+-      inheritance chain, this is by default set to [Object, Module, Class] so that
+-      methods defined on all Objects are omitted. The -v flag can be used to ignore
+-      this setting and show all methods, while the -q can be used to set the ceiling
+-      much lower and show only methods defined on the object or its direct class.
+-
+-      Also check out `find-method` command (run `help find-method`).
+-    BANNER
++    opt.banner = <<-EOF
++Usage: ls [-m|-M|-p|-pM] [-q|-v] [-c|-i] [Object]
++       ls [-g] [-l]
++ls shows you which methods, constants and variables are accessible to Pry. By
++default it shows you the local variables defined in the current shell, and any
++public methods or instance variables defined on the current object.
++
++The colours used are configurable using Pry.config.ls.*_color, and the separator
++is Pry.config.ls.separator.
++
++Pry.config.ls.ceiling is used to hide methods defined higher up in the
++inheritance chain, this is by default set to [Object, Module, Class] so that
++methods defined on all Objects are omitted. The -v flag can be used to ignore
++this setting and show all methods, while the -q can be used to set the ceiling
++much lower and show only methods defined on the object or its direct class.
++  EOF
+ 
+ 
+     def options(opt)
+-- 
+1.8.4.2
+

@@ -1,0 +1,30 @@
+From 965def6cd3ff61f27249832c4c0274ab2c3f6244 Mon Sep 17 00:00:00 2001
+From: Andrew Pinski <apinski@cavium.com>
+Date: Mon, 27 Oct 2014 00:59:39 -0700
+Subject: [PATCH 16/32] Use PTR_REG in getcontext.S.
+
+Just like the other patches, this patch allows for getcontext.S to be used
+between ILP32 and LP64.
+
+* sysdeps/unix/sysv/linux/aarch64/getcontext.S: Use PTR_REG when
+doing an add so wrapping of the pointer is correct for ILP32.
+---
+ sysdeps/unix/sysv/linux/aarch64/getcontext.S | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/sysdeps/unix/sysv/linux/aarch64/getcontext.S b/sysdeps/unix/sysv/linux/aarch64/getcontext.S
+index 70b2e32..4507040 100644
+--- a/sysdeps/unix/sysv/linux/aarch64/getcontext.S
++++ b/sysdeps/unix/sysv/linux/aarch64/getcontext.S
+@@ -90,7 +90,7 @@ ENTRY(__getcontext)
+ 
+ 	/* Grab the signal mask */
+ 	/* rt_sigprocmask (SIG_BLOCK, NULL, &ucp->uc_sigmask, _NSIG8) */
+-	add	x2, x0, #UCONTEXT_SIGMASK
++	add	PTR_REG (2), PTR_REG (0), #UCONTEXT_SIGMASK
+ 	mov	x0, SIG_BLOCK
+ 	mov	x1, 0
+ 	mov	x3, _NSIG8
+-- 
+1.9.3
+

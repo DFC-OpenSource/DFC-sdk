@@ -1,0 +1,120 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:
+# Required-Start: $remote_fs $network $syslog
+# Required-Stop: $remote_fs $syslog
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: Glance API server
+# Description: OpenStack Image Service (code-named Glance) API server
+### END INIT INFO
+
+SUFFIX=@suffix@
+DESC="glance-$SUFFIX"
+DAEMON="/usr/bin/glance-$SUFFIX"
+CONFIG="/etc/glance/glance-$SUFFIX.conf"
+PIDFILE="/var/run/glance-$SUFFIX.pid"
+
+start() 
+{
+    if [ -e $PIDFILE ]; then
+        PIDDIR=/proc/$(cat $PIDFILE)
+        if [ -d ${PIDDIR} ]; then
+            echo "$DESC already running."
+            exit 1
+        else
+            echo "Removing stale PID file $PIDFILE"
+            rm -f $PIDFILE
+        fi
+    fi
+
+    if [ ! -d /var/log/glance ]; then
+        mkdir /var/log/glance
+    fi
+
+    echo -n "Starting $DESC..."
+
+    start-stop-daemon --start --quiet --background \
+        --pidfile ${PIDFILE} --make-pidfile --exec ${DAEMON} \
+	-- --config-file $CONFIG --log-dir=/var/log/glance
+
+    if [ $? -eq 0 ]; then
+        echo "done."
+    else
+        echo "failed."
+    fi
+}
+
+stop() 
+{
+    echo -n "Stopping $DESC..."
+    start-stop-daemon --stop --quiet --pidfile $PIDFILE
+    if [ $? -eq 0 ]; then
+        echo "done."
+    else
+        echo "failed."
+    fi
+    rm -f $PIDFILE
+}
+
+status()
+{
+    pid=`cat $PIDFILE 2>/dev/null`
+    if [ -n "$pid" ]; then
+        if ps -p $pid > /dev/null 2>&1 ; then
+            echo "$DESC is running"
+            return
+        fi
+    fi
+    echo "$DESC is not running"
+}
+
+reset()
+{
+    . /etc/nova/openrc
+
+    # Cleanup all glance images
+    simple_delete "glance image-list --all-tenant" "glance image-delete" 1 "glance image"
+
+    stop
+
+    # This is to make sure postgres is configured and running
+    if ! pidof postmaster > /dev/null; then
+       /etc/init.d/postgresql-init
+       /etc/init.d/postgresql start
+       sleep 5
+    fi
+
+    [ ! -d /var/log/glance ] && mkdir /var/log/glance
+    sudo -u postgres dropdb glance
+    sudo -u postgres createdb glance
+    glance-manage db_sync
+
+    start
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart|force-reload|reload)
+        stop
+        start
+        ;;
+    status)
+	status
+        ;;
+    reset)
+	reset
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|force-reload|restart|reload|status|reset}"
+        exit 1
+        ;;
+esac
+
+exit 0

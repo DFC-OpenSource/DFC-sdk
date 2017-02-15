@@ -1,0 +1,40 @@
+From 0ae370672b9246664a8159709809bcef635fb3e0 Mon Sep 17 00:00:00 2001
+From: Bruce Ashfield <bruce.ashfield@windriver.com>
+Date: Tue, 29 Apr 2014 23:57:24 -0400
+Subject: [PATCH] neutron.conf: jumpstart nova state reporting configuration
+
+To enable neutron reporting of vif states to nova, we need to configure
+neutron.conf with auth urls and passwords. While this configuration isn't
+complete, it fills in some required values (and leaves them commented).
+
+Signed-off-by: Bruce Ashfield <bruce.ashfield@windriver.com>
+---
+ etc/neutron.conf |    6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+Index: git/etc/neutron.conf
+===================================================================
+--- git.orig/etc/neutron.conf
++++ git/etc/neutron.conf
+@@ -197,7 +197,7 @@
+ # notify_nova_on_port_data_changes = True
+ 
+ # URL for connection to nova (Only supports one nova region currently).
+-# nova_url = http://127.0.0.1:8774/v2
++# nova_url = http://%CONTROLLER_IP%:8774/v2
+ 
+ # Name of nova region to use. Useful if keystone manages more than one region
+ # nova_region_name =
+@@ -209,10 +209,10 @@
+ # nova_admin_tenant_id =
+ 
+ # Password for connection to nova in admin context.
+-# nova_admin_password =
++# nova_admin_password = %SERVICE_PASSWORD%
+ 
+ # Authorization URL for connection to nova in admin context.
+-# nova_admin_auth_url =
++# nova_admin_auth_url = http://%CONTROLLER_IP%:8081/keystone/admin
+ 
+ # CA file for novaclient to verify server certificates
+ # nova_ca_certificates_file =

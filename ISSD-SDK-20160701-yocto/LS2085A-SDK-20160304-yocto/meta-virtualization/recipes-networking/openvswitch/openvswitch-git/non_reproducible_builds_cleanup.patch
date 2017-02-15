@@ -1,0 +1,18 @@
+Remove __DATE__, __TIME__ - error messages on non-reproducible builds
+
+Signed-off-by: Amy Fong <amy.fong@windriver.com>
+---
+ datapath/datapath.c             |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+--- a/datapath/datapath.c
++++ b/datapath/datapath.c
+@@ -2142,7 +2142,7 @@
+ 
+ 	BUILD_BUG_ON(sizeof(struct ovs_skb_cb) > FIELD_SIZEOF(struct sk_buff, cb));
+ 
+-	pr_info("Open vSwitch switching datapath %s, built "__DATE__" "__TIME__"\n",
++	pr_info("Open vSwitch switching datapath %s\n",
+ 		VERSION);
+ 
+ 	err = action_fifos_init();

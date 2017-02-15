@@ -1,0 +1,78 @@
+From 5fd5c369cf7ed9fc3640f944aeb848b160a343b2 Mon Sep 17 00:00:00 2001
+From: Andrew Pinski <apinski@cavium.com>
+Date: Mon, 27 Oct 2014 00:59:49 -0700
+Subject: [PATCH 26/32] Add kernel_sigaction.h for AARCH64 ILP32
+
+In ILP32, the sigaction struct is the same as AARCH64 so we need
+the header file kernel_sigaction.h.  To allow for this to work,
+we use a long long fields and then add extra casts when converting
+between the user exposed struct and the kernel exposed struct.
+
+* sysdeps/unix/sysv/linux/aarch64/kernel_sigaction.h: New file.
+* sysdeps/unix/sysv/linux/aarch64/sigaction.c (__libc_sigaction):
+Add cast here it is necessary.
+---
+ sysdeps/unix/sysv/linux/aarch64/kernel_sigaction.h | 12 ++++++++++++
+ sysdeps/unix/sysv/linux/aarch64/sigaction.c        | 10 ++++++----
+ 2 files changed, 18 insertions(+), 4 deletions(-)
+ create mode 100644 sysdeps/unix/sysv/linux/aarch64/kernel_sigaction.h
+
+diff --git a/sysdeps/unix/sysv/linux/aarch64/kernel_sigaction.h b/sysdeps/unix/sysv/linux/aarch64/kernel_sigaction.h
+new file mode 100644
+index 0000000..7b3023b
+--- /dev/null
++++ b/sysdeps/unix/sysv/linux/aarch64/kernel_sigaction.h
+@@ -0,0 +1,12 @@
++
++#define HAVE_SA_RESTORER
++
++/* This is the sigaction structure in aarch64 kernel.
++   Note the ILP32 struct uses the same struct as LP64
++   which is why the fields are 64bit in size. */
++struct kernel_sigaction {
++	unsigned long long k_sa_handler;
++	unsigned long long sa_flags;
++	unsigned long long sa_restorer;
++	sigset_t sa_mask;
++};
+diff --git a/sysdeps/unix/sysv/linux/aarch64/sigaction.c b/sysdeps/unix/sysv/linux/aarch64/sigaction.c
+index ae6c3fd..8adcbba 100644
+--- a/sysdeps/unix/sysv/linux/aarch64/sigaction.c
++++ b/sysdeps/unix/sysv/linux/aarch64/sigaction.c
+@@ -39,15 +39,17 @@ __libc_sigaction (int sig, const struct sigaction *act, struct sigaction *oact)
+ 
+   if (act)
+     {
+-      kact.k_sa_handler = act->sa_handler;
++      kact.k_sa_handler = (unsigned long long)(uintptr_t)act->sa_handler;
+       memcpy (&kact.sa_mask, &act->sa_mask, sizeof (sigset_t));
+       kact.sa_flags = act->sa_flags;
+ #ifdef HAVE_SA_RESTORER
+       if (kact.sa_flags & SA_RESTORER)
+-	kact.sa_restorer = act->sa_restorer;
++	kact.sa_restorer = (unsigned long long)(uintptr_t)act->sa_restorer;
+ #endif
+     }
+ 
++  /* This is needed for ILP32 as the structures are two different sizes due to
++     using the LP64 structure.  */
+   result = INLINE_SYSCALL (rt_sigaction, 4, sig,
+ 			   act ? &kact : NULL,
+ 			   oact ? &koact : NULL, _NSIG / 8);
+@@ -55,11 +57,11 @@ __libc_sigaction (int sig, const struct sigaction *act, struct sigaction *oact)
+     {
+       if (oact && result >= 0)
+ 	{
+-	  oact->sa_handler = koact.k_sa_handler;
++	  oact->sa_handler = (void*)(uintptr_t)koact.k_sa_handler;
+ 	  memcpy (&oact->sa_mask, &koact.sa_mask, sizeof (sigset_t));
+ 	  oact->sa_flags = koact.sa_flags;
+ #ifdef HAVE_SA_RESTORER
+-	  oact->sa_restorer = koact.sa_restorer;
++	  oact->sa_restorer = (void*)(uintptr_t)koact.sa_restorer;
+ #endif
+ 	}
+     }
+-- 
+1.9.3
+

@@ -1,0 +1,33 @@
+From 8fbdaba5c172dd95c08a808a3ec12309461ffbdb Mon Sep 17 00:00:00 2001
+From: Keith Holman <Keith.Holman@windriver.com>
+Date: Tue, 17 Jun 2014 14:34:27 -0400
+Subject: [PATCH] nova: convert path from relative to absolute
+
+Nova requires the configuration file "api-paste.ini".  It is currently
+installed to the "/etc/nova/" directory.  Nova assumes that this
+directory is accessible relative to the current location of source
+files.  This works if the files are stored in the source tree,
+however, in deployment this doesn't work.  This patch changes the path
+to the absolute path on the deployed system.
+
+Signed-off-by: Keith Holman <Keith.Holman@windriver.com>
+---
+ nova/tests/conf_fixture.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/nova/tests/conf_fixture.py b/nova/tests/conf_fixture.py
+index f8e6dda..f8935f9 100644
+--- a/nova/tests/conf_fixture.py
++++ b/nova/tests/conf_fixture.py
+@@ -48,7 +48,7 @@ class ConfFixture(fixtures.Fixture):
+         super(ConfFixture, self).setUp()
+ 
+         self.conf.set_default('api_paste_config',
+-                              paths.state_path_def('etc/nova/api-paste.ini'))
++                              paths.state_path_def('/etc/nova/api-paste.ini'))
+         self.conf.set_default('host', 'fake-mini')
+         self.conf.set_default('compute_driver', 'nova.virt.fake.FakeDriver')
+         self.conf.set_default('fake_network', True)
+-- 
+1.9.3
+

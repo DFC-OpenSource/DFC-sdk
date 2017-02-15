@@ -1,0 +1,18 @@
+--- Python-2.7.9/configure.ac	2015-12-16 00:06:46.382635832 +0530
++++ Python-2.7.9/configure.ac	2015-12-16 00:24:16.266663947 +0530
+@@ -3956,13 +3956,13 @@
+               [],
+               [enable_unicode=yes])
+ 
+-if test $enable_unicode = yes
++if test 1
+ then
+   # Without any arguments, Py_UNICODE defaults to two-byte mode
+   case "$have_ucs4_tcl" in
+   yes) enable_unicode="ucs4"
+        ;;
+-  *)   enable_unicode="ucs2"
++  *)   enable_unicode="ucs4"
+        ;;
+   esac
+ fi

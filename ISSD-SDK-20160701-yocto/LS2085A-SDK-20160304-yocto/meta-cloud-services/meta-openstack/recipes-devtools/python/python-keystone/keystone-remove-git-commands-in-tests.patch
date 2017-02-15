@@ -1,0 +1,39 @@
+From d2ee135a3c97f714e6da59adf45a91a2f1632057 Mon Sep 17 00:00:00 2001
+From: Keith Holman <Keith.Holman@windriver.com>
+Date: Wed, 4 Jun 2014 11:30:53 -0400
+Subject: [PATCH] keystone: remove git commands in tests
+
+Keystone tests are designed to be used during development
+and will use git to download the latest keystoneclient from
+source to test against.  However, on the system installation
+we install keystone-client as a separate package, and do not
+want to download an external version to test.  In order to
+test against the version installed as a separate package,
+remove the git calls that clone the keystone-client repository
+and just returned the desired directory.
+
+Signed-off-by: Keith Holman <Keith.Holman@windriver.com>
+---
+ keystone/tests/core.py | 2 ++
+ 1 file changed, 2 insertions(+)
+
+Index: git/keystone/tests/core.py
+===================================================================
+--- git.orig/keystone/tests/core.py
++++ git/keystone/tests/core.py
+@@ -125,6 +125,7 @@
+ 
+     working_dir = os.getcwd()
+     revdir = os.path.join(VENDOR, '%s-%s' % (name, rev.replace('/', '_')))
++    """
+     modcheck = os.path.join(VENDOR, '.%s-%s' % (name, rev.replace('/', '_')))
+     try:
+         if os.path.exists(modcheck):
+@@ -145,6 +146,7 @@
+             fd.write('1')
+     except environment.subprocess.CalledProcessError:
+         LOG.warning(_('Failed to checkout %s'), repo)
++    """
+     os.chdir(working_dir)
+     return revdir
+ 

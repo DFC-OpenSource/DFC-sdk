@@ -1,0 +1,29 @@
+From edc9acb181810f234b6b9f7d2820b0e4f6a1eeaf Mon Sep 17 00:00:00 2001
+From: Khem Raj <raj.khem@gmail.com>
+Date: Fri, 29 Mar 2013 08:54:48 +0400
+Subject: [PATCH 14/35] sh-pr24836
+
+Signed-off-by: Khem Raj <raj.khem@gmail.com>
+
+Upstream-Status: Pending
+
+http://sourceforge.net/mailarchive/forum.php?thread_id=8959304&forum_id=5348
+http://gcc.gnu.org/bugzilla/show_bug.cgi?id=24836
+---
+ gcc/configure    |    2 +-
+ gcc/configure.ac |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+Index: gcc-linaro-4.8-2013.10/gcc/configure
+===================================================================
+--- gcc-linaro-4.8-2013.10.orig/gcc/configure	2013-11-05 23:39:39.000000000 -0800
++++ gcc-linaro-4.8-2013.10/gcc/configure	2013-11-06 15:22:43.000000000 -0800
+@@ -23394,7 +23394,7 @@
+ 	tls_first_minor=14
+ 	tls_as_opt="-m64 -Aesame --fatal-warnings"
+ 	;;
+-  sh-*-* | sh[34]-*-*)
++  sh-*-* | sh[34]*-*-*)
+     conftest_s='
+ 	.section ".tdata","awT",@progbits
+ foo:	.long	25

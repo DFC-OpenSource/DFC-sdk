@@ -1,0 +1,27 @@
+export OS_TENANT_NAME=admin
+export OS_USERNAME=admin
+export OS_PASSWORD=%OS_PASSWORD%
+export OS_AUTH_URL="http://%CONTROLLER_HOST%:8081/keystone/main/v2.0/"
+export SERVICE_ENDPOINT="http://%CONTROLLER_HOST%:8081/keystone/admin/v2.0"
+export SERVICE_TOKEN=%SERVICE_TOKEN%
+
+function get_field() {
+    while read data; do
+        if [ "$1" -lt 0 ]; then
+            field="(\$(NF$1))"
+        else
+            field="\$$(($1 + 1))"
+        fi
+        echo "$data" | awk -F'[ \t]*\\|[ \t]*' "{print $field}"
+    done
+}
+
+function simple_delete() {
+    $1 | while read line; do
+        id=`echo $line | get_field $3`
+        if [ ! -z "$id" ] ; then
+            echo ">>> Delete $4: id=$id"
+            $2 $id > /dev/null 2>&1
+        fi
+    done
+}

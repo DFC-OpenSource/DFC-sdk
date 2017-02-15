@@ -1,0 +1,40 @@
+From b334852fe1bdb7c32b0eb36263d08e14ff797591 Mon Sep 17 00:00:00 2001
+From: Andrew Pinski <apinski@cavium.com>
+Date: Mon, 27 Oct 2014 00:59:44 -0700
+Subject: [PATCH 21/32] Set up wordsize for ILP32.
+
+__WORDSIZE needs to be set to 32 for ILP32.
+
+* sysdeps/aarch64/bits/wordsize.h (__WORDSIZE): Set to 32 for ILP32.
+Update comments.
+---
+ sysdeps/aarch64/bits/wordsize.h | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/sysdeps/aarch64/bits/wordsize.h b/sysdeps/aarch64/bits/wordsize.h
+index 3ecccaa..3d5a79d 100644
+--- a/sysdeps/aarch64/bits/wordsize.h
++++ b/sysdeps/aarch64/bits/wordsize.h
+@@ -15,12 +15,16 @@
+    License along with the GNU C Library; if not, see
+    <http://www.gnu.org/licenses/>.  */
+ 
+-#define __WORDSIZE	64
++#ifdef __LP64__
++# define __WORDSIZE	64
++#else
++# define __WORDSIZE	32
++#endif
+ 
+-/* LP64 ABI has a 64bit time_t.
++/* LP64 and ILP32s ABI uses a 64bit time_t.
+    This allows aarch32 and AARCH64 applications
+    both access utmp. */
+ #define __WORDSIZE_TIME64_COMPAT32	1
+ 
+-/* LP64 use the 64bit system call interface. */
++/* LP64 and ILP32 use the 64bit system call interface. */
+ #define __SYSCALL_WORDSIZE 64
+-- 
+1.9.3
+

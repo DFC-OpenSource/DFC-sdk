@@ -1,0 +1,41 @@
+From fe143c348c887e2ffee61516aa631e41e4f752ba Mon Sep 17 00:00:00 2001
+From: "Gary S. Robertson" <gary.robertson@linaro.org>
+Date: Wed, 4 Mar 2015 17:16:16 -0600
+Subject: [PATCH] Replace deprecated _BSD_SOURCE with _DEFAULT_SOURCE
+
+Compilation of ODP v1.0 on OpenEmbedded failed due to
+the following warning being treated as an error:
+| In file included from /usr/include/stdlib.h:24:0,
+|                  from odp/example/ipsec/odp_ipsec.c:16:
+| /usr/include/features.h:148:3:
+| error: #warning "_BSD_SOURCE and _SVID_SOURCE are deprecated,
+| use _DEFAULT_SOURCE" [-Werror=cpp]
+|  # warning "_BSD_SOURCE and _SVID_SOURCE are deprecated,
+| use _DEFAULT_SOURCE"
+|     ^
+
+Modified the source 'example/ipsec/odp_ipsec.c' as recommended.
+
+Upstream Status: Applied to lng/odp.git repository
+
+Signed-off-by: Gary S. Robertson <gary.robertson@linaro.org>
+---
+ example/ipsec/odp_ipsec.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/example/ipsec/odp_ipsec.c b/example/ipsec/odp_ipsec.c
+index 70cd957..98160ba 100644
+--- a/example/ipsec/odp_ipsec.c
++++ b/example/ipsec/odp_ipsec.c
+@@ -10,7 +10,7 @@
+  * @example odp_example_ipsec.c  ODP basic packet IO cross connect with IPsec test application
+  */
+ 
+-#define _BSD_SOURCE
++#define _DEFAULT_SOURCE
+ /* enable strtok */
+ #define _POSIX_C_SOURCE 200112L
+ #include <stdlib.h>
+-- 
+1.9.1
+

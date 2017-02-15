@@ -1,0 +1,130 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:          cinder-api
+# Required-Start:    $remote_fs $syslog
+# Required-Stop:     $remote_fs $syslog
+# Should-Start:      postgresql rabbitmq-server
+# Should-Stop:       postgresql rabbitmq-server
+# Default-Start:     3 5
+# Default-Stop:      0 1 2 6
+# Short-Description: OpenStack Block Storage (Cinder) - API
+# Description:       OpenStack Block Storage (Cinder) - API
+### END INIT INFO
+
+SUFFIX=@suffix@
+DESC="cinder-$SUFFIX"
+DAEMON="/usr/bin/cinder-$SUFFIX"
+PIDFILE="/var/run/cinder-$SUFFIX.pid"
+
+start() 
+{
+    if [ -e $PIDFILE ]; then
+        PIDDIR=/proc/$(cat $PIDFILE)
+        if [ -d ${PIDDIR} ]; then
+            echo "$DESC already running."
+            exit 1
+        else
+            echo "Removing stale PID file $PIDFILE"
+            rm -f $PIDFILE
+        fi
+    fi
+
+    if [ ! -d /var/log/cinder ]; then
+        mkdir  /var/log/cinder                                                      
+    fi      
+
+    echo -n "Starting $DESC..."
+
+    start-stop-daemon --start --quiet --background \
+        --pidfile ${PIDFILE} --make-pidfile --exec ${DAEMON} \
+	-- --log-dir=/var/log/cinder
+
+    if [ $? -eq 0 ]; then
+        echo "done."
+    else
+        echo "failed."
+    fi
+}
+
+stop() 
+{
+    echo -n "Stopping $DESC..."
+    start-stop-daemon --stop --quiet --pidfile $PIDFILE
+    if [ $? -eq 0 ]; then
+        echo "done."
+    else
+        echo "failed."
+    fi
+    rm -f $PIDFILE
+}
+
+status()
+{
+    pid=`cat $PIDFILE 2>/dev/null`
+    if [ -n "$pid" ]; then
+        if ps -p $pid > /dev/null 2>&1 ; then
+            echo "$DESC is running"
+            return
+        fi
+    fi
+    echo "$DESC is not running"
+}
+
+reset()
+{
+    . /etc/nova/openrc
+
+    # Cleanup cinder volume
+    simple_delete "cinder list --all-tenant" "cinder delete" 1 "cinder volume"
+
+    # Cleanup cinder backup
+    simple_delete "cinder backup-list" "cinder backup-delete" 1 "cinder backup"
+
+    stop
+
+    if ! pidof postmaster > /dev/null; then
+        /etc/init.d/postgresql-init
+        /etc/init.d/postgresql start
+    fi
+    [ ! -d /var/log/cinder ] && mkdir /var/log/cinder
+    sudo -u postgres dropdb cinder
+    sudo -u postgres createdb cinder
+    cinder-manage db sync
+
+    if [ ! -f /etc/cinder/nfs_shares ]; then
+        /bin/bash /etc/cinder/drivers/nfs_setup.sh
+    fi
+
+    # Create Cinder glusterfs_share config file with default glusterfs server
+    if [ ! -f /etc/cinder/glusterfs_shares ] && [ -f /usr/sbin/glusterfsd ]; then
+        /bin/bash /etc/cinder/drivers/glusterfs_setup.sh
+    fi
+
+    start
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart|force-reload|reload)
+        stop
+        start
+        ;;
+    status)
+	status
+        ;;
+    reset)
+	reset
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|force-reload|restart|reload|status|reset}"
+        exit 1
+        ;;
+esac
+
+exit 0

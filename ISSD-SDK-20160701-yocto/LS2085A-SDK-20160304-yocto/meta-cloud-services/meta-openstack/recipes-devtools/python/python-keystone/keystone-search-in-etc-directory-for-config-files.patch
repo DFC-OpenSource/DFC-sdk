@@ -1,0 +1,41 @@
+From ed3c1f7c8eb90506eda1aafbc6d4de3b9e2abe71 Mon Sep 17 00:00:00 2001
+From: Keith Holman <Keith.Holman@windriver.com>
+Date: Tue, 3 Jun 2014 11:28:23 -0400
+Subject: [PATCH] keystone: search in etc directory for config files
+
+The core.py file in the tests directory is setup to find
+the file as they exist in the source code tree.  When
+deployed some configuration files are moved to the /etc
+directory.  This modification changes the test code to
+find the files in the new location.
+
+Signed-off-by: Keith Holman <Keith.Holman@windriver.com>
+---
+ keystone/tests/core.py | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+Index: git/keystone/tests/core.py
+===================================================================
+--- git.orig/keystone/tests/core.py
++++ git/keystone/tests/core.py
+@@ -68,9 +68,9 @@
+ PID = six.text_type(os.getpid())
+ TESTSDIR = os.path.dirname(os.path.abspath(__file__))
+ TESTCONF = os.path.join(TESTSDIR, 'config_files')
+-ROOTDIR = os.path.normpath(os.path.join(TESTSDIR, '..', '..'))
++ROOTDIR = os.path.normpath(os.path.join(TESTSDIR, '..'))
+ VENDOR = os.path.join(ROOTDIR, 'vendor')
+-ETCDIR = os.path.join(ROOTDIR, 'etc')
++ETCDIR = "/etc/keystone"
+ 
+ 
+ def _calc_tmpdir():
+@@ -560,7 +560,7 @@
+     def _paste_config(self, config):
+         if not config.startswith('config:'):
+             test_path = os.path.join(TESTSDIR, config)
+-            etc_path = os.path.join(ROOTDIR, 'etc', config)
++            etc_path = os.path.join(ETCDIR, config)
+             for path in [test_path, etc_path]:
+                 if os.path.exists('%s-paste.ini' % path):
+                     return 'config:%s-paste.ini' % path

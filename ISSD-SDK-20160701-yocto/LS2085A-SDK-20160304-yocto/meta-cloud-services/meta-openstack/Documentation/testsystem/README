@@ -1,0 +1,116 @@
+OpenStack: Minimally Viable Test System
+
+Usage:
+	<script> [config file] [start|stop|restart]
+
+This test harness creates a virtual network and the specified virtual
+domains enabling the user to create a test system for openstack.
+
+Arguments:
+	config file: this configuration file specifies the test system
+		to create, see below for details
+	start|stop|restart:
+		start - starts specifies test system
+		stop - stops specifies test system
+		restart - reboots specifies test system
+
+Note: On some systems, there may be issues with restart, to workaround, use start with
+      auto_destroy enabled.
+
+Virtual Network
+---------------
+
+This test harness creates a virtual network (ops_default) using the
+network specified in the configuration file.
+e.g.
+[main]
+network: 192.168.122.1
+
+The script tries to create the virtual network using virbr0, but if this is
+in use, then it will retry at virbr1, virbr2, .... etc until it finds one or
+it gives up after a number of attempts.
+
+
+Virtual Domains
+---------------
+
+The script then creates a controller using the specified kernel and disk image
+e.g.
+[controller]
+kernel: /root/images/bzImage
+disk: /root/images/controller.ext3
+
+The script then creates compute nodes by using a section header starting with
+the string "compute" along with kernel(s)/disk image(s).
+
+e.g.
+[compute0]
+kernel: /root/images/bzImage
+disk: /root/images/compute1.ext3
+
+[compute1]
+kernel: /root/images/bzImage
+disk: /root/images/compute2.ext3
+
+
+IP address assignments
+----------------------
+There is an auto_assign_ip variable under the section main.
+ie
+[main]
+auto_assign_ip: False
+
+This value, if True, causes the kernel to be pass ip=dhcp in the kernel's
+boot parameters.
+
+If the value is False, the each controller and compute section will be
+required to have a value defined for ip.
+
+ie.
+[compute0]
+kernel: /root/images/bzImage
+disk: /root/images/compute1.ext3
+ip: 192.168.122.10
+
+
+Other
+-----
+
+The configuration file also specifies the emulator to be used
+for the domains:
+e.g.
+[main]
+emulator: /usr/bin/qemu-system-x86_64
+
+The configuration file also specifies an auto_destroy option
+e.g.
+[main]
+auto_destroy: True
+
+If auto_destroy is enabled (True), if the required controller/compute nodes
+are running, then the script will automatically destroy the running domains.
+Otherwise, if disabled (False), then the script will display a message that the
+domain is active and exit. (auto_destroy is only used when starting systems)
+
+
+Example configuration file
+--------------------------
+[main]
+network: 192.168.122.1
+emulator: /usr/bin/qemu-system-x86_64
+auto_destroy: True
+auto_assign_ip: True
+
+[controller]
+kernel: /root/images/bzImage
+disk: /root/images/controller.ext3
+
+[compute0]
+kernel: /root/images/bzImage
+disk: /root/images/compute1.ext3
+
+[compute1]
+kernel: /root/images/bzImage
+disk: /root/images/compute2.ext3
+-------------------------------------------------
+

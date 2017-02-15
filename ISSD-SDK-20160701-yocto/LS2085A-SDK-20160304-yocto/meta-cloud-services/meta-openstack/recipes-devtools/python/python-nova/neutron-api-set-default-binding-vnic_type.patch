@@ -1,0 +1,31 @@
+From 5f7ffa7f9eb0e35b8a18a6f0bf680149af174232 Mon Sep 17 00:00:00 2001
+From: Bruce Ashfield <bruce.ashfield@windriver.com>
+Date: Tue, 16 Sep 2014 15:14:15 -0400
+Subject: [PATCH] neutron/api: set default binding:vnic_type
+
+Fix the following issue: https://bugs.launchpad.net/neutron/+bug/1370077,
+by ensuring that if the backend driver doesn't set vnic_type, that the
+default of VNIC_TYPE_NORMAL is used.
+
+Signed-off-by: Bruce Ashfield <bruce.ashfield@windriver.com>
+---
+ nova/network/neutronv2/api.py | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/nova/network/neutronv2/api.py b/nova/network/neutronv2/api.py
+index 124640e1a275..67811788e1a4 100644
+--- a/nova/network/neutronv2/api.py
++++ b/nova/network/neutronv2/api.py
+@@ -1361,6 +1361,9 @@ class API(base_api.NetworkAPI):
+                     or current_neutron_port['status'] == 'ACTIVE'):
+                     vif_active = True
+ 
++                if not 'binding:vnic_type' in current_neutron_port:
++                    current_neutron_port['binding:vnic_type'] = network_model.VNIC_TYPE_NORMAL
++
+                 network_IPs = self._nw_info_get_ips(client,
+                                                     current_neutron_port)
+                 subnets = self._nw_info_get_subnets(context,
+-- 
+1.9.1
+

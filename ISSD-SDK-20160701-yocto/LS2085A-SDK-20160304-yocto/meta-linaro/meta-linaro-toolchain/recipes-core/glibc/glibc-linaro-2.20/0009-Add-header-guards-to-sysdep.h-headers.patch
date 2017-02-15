@@ -1,0 +1,138 @@
+From 6d7277631963cebbb8d437cb1525643ade63e883 Mon Sep 17 00:00:00 2001
+From: Andrew Pinski <apinski@cavium.com>
+Date: Mon, 27 Oct 2014 00:59:32 -0700
+Subject: [PATCH 09/32] Add header guards to sysdep.h headers.
+
+* sysdeps/aarch64/sysdep.h: Add header guards.
+
+[AARCH64] Remove 64 from some relocation names as they have been renamed in later versions of the spec.
+
+The AARCH64 elf ABI spec renamed some relocations removing 64 from the TLS
+relocation names to make them constaint with the ILP32 named ones.
+
+* elf/elf.h (R_AARCH64_TLS_DTPMOD64): Rename to ..
+(R_AARCH64_TLS_DTPMOD): This.
+(R_AARCH64_TLS_DTPREL64): Rename to ...
+(R_AARCH64_TLS_DTPREL): This.
+(R_AARCH64_TLS_TPREL64): Rename to ...
+(R_AARCH64_TLS_TPREL): This.
+* sysdeps/aarch64/dl-machine.h (elf_machine_type_class): Update
+R_AARCH64_TLS_DTPMOD64, R_AARCH64_TLS_DTPREL64, and R_AARCH64_TLS_TPREL64.
+(elf_machine_rela): Likewise.
+
+[AARCH64] Fix pltenter and pltexit for ILP32.
+
+* sysdeps/aarch64/bits/link.h (la_aarch64_gnu_pltenter): Use
+ElfW macro instead of hardcoded Elf64 types.
+---
+ elf/elf.h                    |  6 +++---
+ sysdeps/aarch64/bits/link.h  |  6 +++---
+ sysdeps/aarch64/dl-machine.h | 12 ++++++------
+ sysdeps/aarch64/sysdep.h     |  5 +++++
+ 4 files changed, 17 insertions(+), 12 deletions(-)
+
+diff --git a/elf/elf.h b/elf/elf.h
+index 78815e8..0dbf52b 100644
+--- a/elf/elf.h
++++ b/elf/elf.h
+@@ -2479,9 +2479,9 @@ typedef Elf32_Addr Elf32_Conflict;
+ #define R_AARCH64_GLOB_DAT     1025	/* Create GOT entry.  */
+ #define R_AARCH64_JUMP_SLOT    1026	/* Create PLT entry.  */
+ #define R_AARCH64_RELATIVE     1027	/* Adjust by program base.  */
+-#define R_AARCH64_TLS_DTPMOD64 1028	/* Module number, 64 bit.  */
+-#define R_AARCH64_TLS_DTPREL64 1029	/* Module-relative offset, 64 bit.  */
+-#define R_AARCH64_TLS_TPREL64  1030	/* TP-relative offset, 64 bit.  */
++#define R_AARCH64_TLS_DTPMOD   1028	/* Module number, 64 bit.  */
++#define R_AARCH64_TLS_DTPREL   1029	/* Module-relative offset, 64 bit.  */
++#define R_AARCH64_TLS_TPREL    1030	/* TP-relative offset, 64 bit.  */
+ #define R_AARCH64_TLSDESC      1031	/* TLS Descriptor.  */
+ #define R_AARCH64_IRELATIVE	1032	/* STT_GNU_IFUNC relocation.  */
+ 
+diff --git a/sysdeps/aarch64/bits/link.h b/sysdeps/aarch64/bits/link.h
+index fe06827..3a84a18 100644
+--- a/sysdeps/aarch64/bits/link.h
++++ b/sysdeps/aarch64/bits/link.h
+@@ -40,8 +40,8 @@ typedef struct La_aarch64_retval
+ } La_aarch64_retval;
+ __BEGIN_DECLS
+ 
+-extern Elf64_Addr
+-la_aarch64_gnu_pltenter (Elf64_Sym *__sym, unsigned int __ndx,
++extern ElfW(Addr)
++la_aarch64_gnu_pltenter (ElfW(Sym) *__sym, unsigned int __ndx,
+ 			 uintptr_t *__refcook,
+ 			 uintptr_t *__defcook,
+ 			 La_aarch64_regs *__regs,
+@@ -50,7 +50,7 @@ la_aarch64_gnu_pltenter (Elf64_Sym *__sym, unsigned int __ndx,
+ 			 long int *__framesizep);
+ 
+ extern unsigned int
+-la_aarch64_gnu_pltexit (Elf64_Sym *__sym, unsigned int __ndx,
++la_aarch64_gnu_pltexit (ElfW(Sym) *__sym, unsigned int __ndx,
+ 			uintptr_t *__refcook,
+ 			uintptr_t *__defcook,
+ 			const La_aarch64_regs *__inregs,
+diff --git a/sysdeps/aarch64/dl-machine.h b/sysdeps/aarch64/dl-machine.h
+index 6615b8f..ebac353 100644
+--- a/sysdeps/aarch64/dl-machine.h
++++ b/sysdeps/aarch64/dl-machine.h
+@@ -188,9 +188,9 @@ _dl_start_user:							\n\
+ 
+ #define elf_machine_type_class(type)					\
+   ((((type) == R_AARCH64_JUMP_SLOT ||					\
+-     (type) == R_AARCH64_TLS_DTPMOD64 ||				\
+-     (type) == R_AARCH64_TLS_DTPREL64 ||				\
+-     (type) == R_AARCH64_TLS_TPREL64 ||					\
++     (type) == R_AARCH64_TLS_DTPMOD ||				\
++     (type) == R_AARCH64_TLS_DTPREL ||				\
++     (type) == R_AARCH64_TLS_TPREL ||					\
+      (type) == R_AARCH64_TLSDESC) * ELF_RTYPE_CLASS_PLT)		\
+    | (((type) == R_AARCH64_COPY) * ELF_RTYPE_CLASS_COPY))
+ 
+@@ -314,7 +314,7 @@ elf_machine_rela (struct link_map *map, const ElfW(Rela) *reloc,
+ 	    break;
+ 	  }
+ 
+-	case R_AARCH64_TLS_DTPMOD64:
++	case R_AARCH64_TLS_DTPMOD:
+ #ifdef RTLD_BOOTSTRAP
+ 	  *reloc_addr = 1;
+ #else
+@@ -325,12 +325,12 @@ elf_machine_rela (struct link_map *map, const ElfW(Rela) *reloc,
+ #endif
+ 	  break;
+ 
+-	case R_AARCH64_TLS_DTPREL64:
++	case R_AARCH64_TLS_DTPREL:
+ 	  if (sym)
+ 	    *reloc_addr = sym->st_value + reloc->r_addend;
+ 	  break;
+ 
+-	case R_AARCH64_TLS_TPREL64:
++	case R_AARCH64_TLS_TPREL:
+ 	  if (sym)
+ 	    {
+ 	      CHECK_STATIC_TLS (map, sym_map);
+diff --git a/sysdeps/aarch64/sysdep.h b/sysdeps/aarch64/sysdep.h
+index 7169ba7..af196f2 100644
+--- a/sysdeps/aarch64/sysdep.h
++++ b/sysdeps/aarch64/sysdep.h
+@@ -16,6 +16,9 @@
+    License along with the GNU C Library; if not, see
+    <http://www.gnu.org/licenses/>.  */
+ 
++#ifndef _AARCH64_SYSDEP_H
++#define _AARCH64_SYSDEP_H
++
+ #include <sysdeps/generic/sysdep.h>
+ 
+ #ifdef	__ASSEMBLER__
+@@ -96,3 +99,5 @@
+ #define mcount		_mcount
+ 
+ #endif	/* __ASSEMBLER__ */
++
++#endif  /* _AARCH64_SYSDEP_H */
+-- 
+1.9.3
+

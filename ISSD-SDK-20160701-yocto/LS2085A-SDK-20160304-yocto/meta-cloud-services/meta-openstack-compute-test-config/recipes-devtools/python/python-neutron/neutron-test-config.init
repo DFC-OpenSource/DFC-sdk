@@ -1,0 +1,57 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:
+# Required-Start: $remote_fs $network $syslog
+# Required-Stop: $remote_fs $syslog
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: Neutron Test Config
+# Description: OpenStack Neutron Test Config
+### END INIT INFO
+
+
+OVS_NEUTRON_PLUGIN=/etc/neutron/plugins/openvswitch/ovs_neutron_plugin.ini
+
+
+start()
+{
+    local eth_dev="%NEUTRON_CONF_EXT_ETH_IF%"
+    local ip="%COMPUTE_IP%"
+    local ip_subnet="`echo $ip | cut -d '.' -f 1`.`echo $ip | cut -d '.' -f 2`.`echo $ip | cut -d '.' -f 3`"
+    if [ -z "$gate_way" ]; then
+        local gate_way="${ip_subnet}.1"
+    fi
+
+    sed -i "s/^# Example: network_vlan_ranges = physnet1:1000:2999/network_vlan_ranges = ph-eth0:1:1/" $OVS_NEUTRON_PLUGIN
+    sed -i "s/^network_vlan_ranges = .*/network_vlan_ranges = ph-eth0:1:1/" $OVS_NEUTRON_PLUGIN
+    sed -i "s/^# Example: bridge_mappings = physnet1:br-eth1/bridge_mappings = ph-eth0:br-eth0/" $OVS_NEUTRON_PLUGIN
+    sed -i "s/^bridge_mappings = .*/bridge_mappings = ph-eth0:br-eth0/" $OVS_NEUTRON_PLUGIN
+    sed -i "s/^local_ip = .*/local_ip = ${ip}/" $OVS_NEUTRON_PLUGIN
+
+    # Setup host OVS
+    ovs-vsctl add-br br-${eth_dev}
+    ovs-vsctl add-port br-${eth_dev} ${eth_dev}
+    ifconfig ${eth_dev} 0.0.0.0
+    ifconfig br-${eth_dev} ${ip}/16
+    route add default gw $gate_way
+
+    /etc/init.d/neutron-openvswitch-agent stop
+    /etc/init.d/nova-compute reload
+    /etc/init.d/neutron-openvswitch-agent start
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop|force-reload|restart|reload|status)
+        echo "WARNING: command $1 is not supported"
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|force-reload|restart|reload|status}"
+        exit 1
+        ;;
+esac
+
+exit 0

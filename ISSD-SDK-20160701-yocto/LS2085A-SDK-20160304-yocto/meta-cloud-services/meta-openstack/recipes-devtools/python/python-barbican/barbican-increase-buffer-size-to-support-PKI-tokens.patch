@@ -1,0 +1,36 @@
+From 8b78d792ca7f7ba4e105225c3917c0a467a2fadb Mon Sep 17 00:00:00 2001
+From: Keith Holman <Keith.Holman@windriver.com>
+Date: Thu, 22 May 2014 12:08:13 -0400
+Subject: [PATCH] barbican: increase buffer-size to support PKI tokens
+
+With Keystone using larger PKI tokens (versus the previous UUID
+tokens) causes Barbican to fail when using authentication, as
+the generated packets are too large.  Increasing the maximum
+buffer size uWSGI uses fixes this problem.  This fix allows the
+packet sized to be specified in the build recipe file.
+
+Signed-off-by: Keith Holman <Keith.Holman@windriver.com>
+---
+ etc/barbican/vassals/barbican-admin.ini | 1 +
+ etc/barbican/vassals/barbican-api.ini   | 1 +
+ 2 files changed, 2 insertions(+)
+
+Index: git/etc/barbican/vassals/barbican-admin.ini
+===================================================================
+--- git.orig/etc/barbican/vassals/barbican-admin.ini
++++ git/etc/barbican/vassals/barbican-admin.ini
+@@ -9,3 +9,4 @@
+ plugins = python
+ paste = config:/etc/barbican/barbican-admin-paste.ini
+ add-header = Connection: close
++buffer-size = %BARBICAN_MAX_PACKET_SIZE%
+Index: git/etc/barbican/vassals/barbican-api.ini
+===================================================================
+--- git.orig/etc/barbican/vassals/barbican-api.ini
++++ git/etc/barbican/vassals/barbican-api.ini
+@@ -9,3 +9,4 @@
+ plugins = python
+ paste = config:/etc/barbican/barbican-api-paste.ini
+ add-header = Connection: close
++buffer-size = %BARBICAN_MAX_PACKET_SIZE%
+\ No newline at end of file

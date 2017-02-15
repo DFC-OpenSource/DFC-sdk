@@ -1,0 +1,75 @@
+What is Puppet
+------------------------
+Puppet is a configuration management system that allows you to define the
+state of your IT infrastructure, then automatically enforces the correct state.
+
+
+Basic Requirements
+------------------------
+Ruby 1.8.7 or later
+Facter 1.7.0 or later
+Hiera 1.0 or later
+The json gem (any modern version)
+
+
+Simple Demo
+------------------------
+In this simple demo, we have a CA master server named 'master' and ip is 192.168.2.83
+and an agent node named 'agent', ip is 192.168.2.30. 
+
+On master server, file 'test.cfg' is under /etc/puppet/files/, puppet will sync this
+file to /opt/ folder on agent node.
+
+Step 1: Configure Puppet CA Master Server
+1) create a puppet group and user
+$ puppet resource group puppet ensure=presnt
+$ puppet resource user puppet ensure=present gid=puppet shell='/sbin/nologin'
+
+2) create the CA certificate and the puppet master certificate
+$ puppet master --verbose --no-daemonize
+(Once it says Notice: Starting Puppet master version <VERSION>, type ctrl-C to kill the process)
+
+3) $ vi /etc/hosts
+add new line:
+192.168.2.30    agent
+
+4) start puppet master
+$ puppet master --verbose --no-daemonize &
+
+
+Step 2: Config Puppet Agent Node
+1) Edit puppet.conf
+$ echo "[main]
+server = master" >> /etc/puppet/puppet.conf
+
+2) $ vi /etc/hosts
+add new line:
+192.168.2.83    master
+
+3) Request certificates
+$ puppet agent --test --ca_server=t2080qds -w 60
+(Accept the request on master server by this command: puppet cert sign --all)
+
+
+Step 3: Add site map on master
+1) Edit /etc/puppet/fileserver.conf to make /etc/puppet/files available
+$ mkdir /etc/puppet/files
+$ touch /etc/puppet/files/test.cfg
+$ vi /etc/puppet/fileserver.conf
+add following lines:
+[extra_files]
+   path /etc/puppet/files
+   allow *
+
+2) Add a new sitemap
+$ vi /etc/puppet/manifests/site.pp
+add follwing lines:
+file
+{ "/opt/test.cfg":
+source => "puppet:///extra_files/test.cfg",
+}
+
+
+Step 4: Run puppet on agent
+$ puppet agent --test
+$ ls /opt/ 

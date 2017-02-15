@@ -1,0 +1,37 @@
+---
+ hp3parclient/http.py |   10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+--- a/hp3parclient/http.py
++++ b/hp3parclient/http.py
+@@ -61,6 +61,7 @@
+         self.set_debug_flag(http_log_debug)
+ 
+         self.times = []  # [("item", starttime, endtime), ...]
++        self.times_max_len = 200
+ 
+         # httplib2 overrides
+         self.force_exception_to_status_code = True
+@@ -141,6 +142,12 @@
+         """
+         self.times = []
+ 
++    def get_timings_max_len(self):
++        return self.times_max_len
++
++    def set_timings_max_len(self, new_len):
++        self.times_max_len = new_len
++
+     def _http_log_req(self, args, kwargs):
+         if not self.http_log_debug:
+             return
+@@ -205,6 +212,9 @@
+         resp, body = self.request(url, method, **kwargs)
+         self.times.append(("%s %s" % (method, url),
+                            start_time, time.time()))
++        # remove oldest items until we maintain max length
++        while len(self.times) > self.times_max_len:
++            del self.times[0]
+         return resp, body
+ 
+ 

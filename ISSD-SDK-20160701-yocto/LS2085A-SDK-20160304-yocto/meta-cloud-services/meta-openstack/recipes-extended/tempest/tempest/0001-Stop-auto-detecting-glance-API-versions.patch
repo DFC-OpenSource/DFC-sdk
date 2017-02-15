@@ -1,0 +1,33 @@
+Stop auto-detecting glance API versions
+
+This commit switches the image api tests from auto detecting which
+api versions are available to having them explicitly set in the config
+file. This is to make it explicit which tests are expected to be run
+instead of assuming that everything is expected to work.
+
+Partially Implements: blueprint config-cleanup
+
+Change-Id: Ie958a7fb03ff502c5ea1783eaae9debb442c34ea
+---
+ etc/tempest.conf.sample   |    9 ++++++---
+ tempest/api/image/base.py |   15 ++-------------
+ tempest/config.py         |   16 +++++++++++++---
+ 3 files changed, 21 insertions(+), 19 deletions(-)
+
+Index: git/etc/tempest.conf.sample
+===================================================================
+--- git.orig/etc/tempest.conf.sample
++++ git/etc/tempest.conf.sample
+@@ -587,10 +587,10 @@
+ #
+ 
+ # Is the v2 image API enabled (boolean value)
+-#api_v2=true
++api_v2=true
+ 
+ # Is the v1 image API enabled (boolean value)
+-#api_v1=true
++api_v1=true
+ 
+ 
+ [input-scenario]

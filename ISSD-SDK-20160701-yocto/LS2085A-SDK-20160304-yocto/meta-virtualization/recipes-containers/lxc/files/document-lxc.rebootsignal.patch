@@ -1,0 +1,140 @@
+From baefc2176780b5e4527c1f86206c0ea72d80c8f5 Mon Sep 17 00:00:00 2001
+From: Bogdan Purcareata <bogdan.purcareata@freescale.com>
+Date: Tue, 10 Mar 2015 10:06:58 +0000
+Subject: [PATCH] document lxc.rebootsignal
+
+Also fix some minor indentation mishaps since we're here.
+
+Upstrem-Status: Backport [from LXC 1.1]
+[https://github.com/lxc/lxc/commit/936762f3fb6cf10e0756719f03aebe052d5c31a8]
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@freescale.com>
+Acked-by: Serge E. Hallyn <serge.hallyn@ubuntu.com>
+---
+ doc/lxc-stop.sgml.in           |  4 +-
+ doc/lxc.container.conf.sgml.in | 86 ++++++++++++++++++++++++++----------------
+ 2 files changed, 57 insertions(+), 33 deletions(-)
+
+diff --git a/doc/lxc-stop.sgml.in b/doc/lxc-stop.sgml.in
+index bc5e6a8..3c69fed 100644
+--- a/doc/lxc-stop.sgml.in
++++ b/doc/lxc-stop.sgml.in
+@@ -70,7 +70,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+       the container's init process, waiting up to 60 seconds for the container
+       to exit, and then returning. If the container fails to cleanly exit in
+       60 seconds, it will be sent the <command>lxc.stopsignal</command>
+-      (defaults to SIGKILL) to force it to shut down.
++      (defaults to SIGKILL) to force it to shut down. A request to reboot will
++      send the <command>lxc.rebootsignal</command> (defaults to SIGINT) to the
++      container's init process.
+     </para>
+ 	<para>
+ 	The <optional>-W</optional>, <optional>-r</optional>,
+diff --git a/doc/lxc.container.conf.sgml.in b/doc/lxc.container.conf.sgml.in
+index e98496d..1962528 100644
+--- a/doc/lxc.container.conf.sgml.in
++++ b/doc/lxc.container.conf.sgml.in
+@@ -158,46 +158,68 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+     <refsect2>
+       <title>Halt signal</title>
+       <para>
+-    Allows one to specify signal name or number, sent by lxc-stop to the
+-    container's init process to cleanly shutdown the container. Different
+-    init systems could use different signals to perform clean shutdown
+-    sequence. This option allows the signal to be specified in kill(1)
+-    fashion, e.g. SIGPWR, SIGRTMIN+14, SIGRTMAX-10 or plain number. The
+-    default signal is SIGPWR.
++        Allows one to specify signal name or number, sent by lxc-stop to the
++        container's init process to cleanly shutdown the container. Different
++        init systems could use different signals to perform clean shutdown
++        sequence. This option allows the signal to be specified in kill(1)
++        fashion, e.g. SIGPWR, SIGRTMIN+14, SIGRTMAX-10 or plain number. The
++        default signal is SIGPWR.
+       </para>
+       <variablelist>
+-    <varlistentry>
+-      <term>
+-        <option>lxc.haltsignal</option>
+-      </term>
+-      <listitem>
+-        <para>
+-          specify the signal used to halt the container
+-        </para>
+-      </listitem>
+-    </varlistentry>
++        <varlistentry>
++          <term>
++            <option>lxc.haltsignal</option>
++          </term>
++          <listitem>
++            <para>
++              specify the signal used to halt the container
++            </para>
++          </listitem>
++        </varlistentry>
++      </variablelist>
++    </refsect2>
++
++    <refsect2>
++      <title>Reboot signal</title>
++      <para>
++        Allows one to specify signal name or number, sent by lxc-stop to
++        reboot the container. This option allows signal to be specified in
++        kill(1) fashion, e.g. SIGTERM, SIGRTMIN+14, SIGRTMAX-10 or plain number.
++        The default signal is SIGINT.
++          </para>
++          <variablelist>
++        <varlistentry>
++          <term>
++            <option>lxc.rebootsignal</option>
++          </term>
++          <listitem>
++            <para>
++              specify the signal used to reboot the container
++            </para>
++          </listitem>
++        </varlistentry>
+       </variablelist>
+     </refsect2>
+ 
+     <refsect2>
+       <title>Stop signal</title>
+       <para>
+-    Allows one to specify signal name or number, sent by lxc-stop to forcibly
+-    shutdown the container. This option allows signal to be specified in
+-    kill(1) fashion, e.g. SIGKILL, SIGRTMIN+14, SIGRTMAX-10 or plain number.
+-    The default signal is SIGKILL.
+-      </para>
+-      <variablelist>
+-    <varlistentry>
+-      <term>
+-        <option>lxc.stopsignal</option>
+-      </term>
+-      <listitem>
+-        <para>
+-          specify the signal used to stop the container
+-        </para>
+-      </listitem>
+-    </varlistentry>
++        Allows one to specify signal name or number, sent by lxc-stop to forcibly
++        shutdown the container. This option allows signal to be specified in
++        kill(1) fashion, e.g. SIGKILL, SIGRTMIN+14, SIGRTMAX-10 or plain number.
++        The default signal is SIGKILL.
++          </para>
++          <variablelist>
++        <varlistentry>
++          <term>
++            <option>lxc.stopsignal</option>
++          </term>
++          <listitem>
++            <para>
++              specify the signal used to stop the container
++            </para>
++          </listitem>
++        </varlistentry>
+       </variablelist>
+     </refsect2>
+ 
+-- 
+2.1.4
+

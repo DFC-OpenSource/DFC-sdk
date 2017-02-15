@@ -1,0 +1,14 @@
+This repository contains Linaro layers for OpenEmbedded.
+
+meta-aarch64:
+
+  This repo provides support for AArch64 (64-bit ARM) architecture
+
+meta-linaro:
+
+  This repo provides additional recipes required for Linaro targets.
+
+meta-linaro-toolchain:
+
+  This layer adds support for building with GCC Linaro and Linaro external
+  toolchain.

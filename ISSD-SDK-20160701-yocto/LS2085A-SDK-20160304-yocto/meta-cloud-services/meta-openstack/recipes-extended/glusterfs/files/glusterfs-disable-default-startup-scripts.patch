@@ -1,0 +1,25 @@
+The glusterfs code for installing start-up scripts checks for systemd
+directories on the build host, and if it finds them, it chooses systemd
+style scripts, otherwise init.d style scripts.  This behavior might
+conceivably be suitable for self-hosted builds, but it's grossly broken
+for cross-build environments.  Since we want to install custom WR scripts
+regardless of which script style we support, we patch glusterfs so that
+it doesn't install any of its default start-up scripts.
+
+Upstream-Status: Inappropriate [WR-specific change]
+Signed-off-by: Donn Seeley <donn.seeley@windriver.com>
+---
+ extras/Makefile.am |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+--- a/extras/Makefile.am
++++ b/extras/Makefile.am
+@@ -2,7 +2,7 @@
+ EditorModedir = $(docdir)
+ EditorMode_DATA = glusterfs-mode.el glusterfs.vim
+ 
+-SUBDIRS = init.d systemd benchmarking hook-scripts $(OCF_SUBDIR) LinuxRPM
++SUBDIRS = benchmarking hook-scripts $(OCF_SUBDIR) LinuxRPM
+ 
+ confdir = $(sysconfdir)/glusterfs
+ conf_DATA = glusterfs-logrotate

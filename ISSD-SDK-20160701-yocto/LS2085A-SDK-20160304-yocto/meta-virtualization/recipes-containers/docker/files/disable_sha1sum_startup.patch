@@ -1,0 +1,57 @@
+docker engine not running
+
+In yocto builds, preprocessing of binaries can happen after the install phase.
+Some of these can modify the size/sha1sum of the binaries.
+e.g. A new .gnu_debuglink can happen
+
+docker will not start because of these modifications. Docker initially
+does a sha1sum of dockerinit to identify the dockerinit that it was built
+with, this is done for security and for compatibility reasons. Since
+this checking is disabled, we should rely on rpm tests for validation
+of the binary instead.
+
+Signed-off-by: Amy Fong <amy.fong@windriver.com>
+---
+ utils/utils.go |   17 +----------------
+ 1 file changed, 1 insertion(+), 16 deletions(-)
+
+--- a/utils/utils.go
++++ b/utils/utils.go
+@@ -4,7 +4,6 @@
+ 	"bufio"
+ 	"bytes"
+ 	"crypto/rand"
+-	"crypto/sha1"
+ 	"crypto/sha256"
+ 	"encoding/hex"
+ 	"fmt"
+@@ -76,20 +75,6 @@
+ 	return path
+ }
+ 
+-func dockerInitSha1(target string) string {
+-	f, err := os.Open(target)
+-	if err != nil {
+-		return ""
+-	}
+-	defer f.Close()
+-	h := sha1.New()
+-	_, err = io.Copy(h, f)
+-	if err != nil {
+-		return ""
+-	}
+-	return hex.EncodeToString(h.Sum(nil))
+-}
+-
+ func isValidDockerInitPath(target string, selfPath string) bool { // target and selfPath should be absolute (InitPath and SelfPath already do this)
+ 	if target == "" {
+ 		return false
+@@ -111,7 +96,7 @@
+ 		}
+ 		return os.SameFile(targetFileInfo, selfPathFileInfo)
+ 	}
+-	return dockerversion.INITSHA1 != "" && dockerInitSha1(target) == dockerversion.INITSHA1
++	return true
+ }
+ 
+ // Figure out the path of our dockerinit (which may be SelfPath())

@@ -1,0 +1,108 @@
+From 0c96833f64a81f61c8709924fe79bc9f5137a0b8 Mon Sep 17 00:00:00 2001
+From: Andrew Pinski <apinski@cavium.com>
+Date: Mon, 27 Oct 2014 00:59:46 -0700
+Subject: [PATCH 23/32] Add support to ldconfig for ILP32 and libilp32
+
+This patch adds support to ldconfig for libilp32 which is used by
+ILP32.
+
+* sysdeps/generic/ldconfig.h (FLAG_AARCH64_LIB32): New define.
+* elf/cache.c (print_entry): Handle FLAG_AARCH64_LIB32.
+* sysdeps/unix/sysv/linux/aarch64/dl-cache.h (_DL_CACHE_DEFAULT_ID):
+Define it to be the FLAG_AARCH64_LIB32 if compiling for ILP32.
+(add_system_dir): Add libilp32 to the list of system directories.
+* sysdeps/unix/sysv/linux/arm/readelflib.c (process_elf_file):
+Handle ILP32 elf binaries.
+---
+ elf/cache.c                                |  2 ++
+ sysdeps/generic/ldconfig.h                 |  1 +
+ sysdeps/unix/sysv/linux/aarch64/dl-cache.h | 13 ++++++++++++-
+ sysdeps/unix/sysv/linux/arm/readelflib.c   |  4 +++-
+ 4 files changed, 18 insertions(+), 2 deletions(-)
+
+diff --git a/elf/cache.c b/elf/cache.c
+index 4cbf8d9..267214f 100644
+--- a/elf/cache.c
++++ b/elf/cache.c
+@@ -101,6 +101,8 @@ print_entry (const char *lib, int flag, unsigned int osversion,
+     case FLAG_AARCH64_LIB64:
+       fputs (",AArch64", stdout);
+       break;
++    case FLAG_AARCH64_LIB32:
++      fputs (",ILP32", stdout);
+     /* Uses the ARM soft-float ABI.  */
+     case FLAG_ARM_LIBSF:
+       fputs (",soft-float", stdout);
+diff --git a/sysdeps/generic/ldconfig.h b/sysdeps/generic/ldconfig.h
+index ba1d953..1dd8b4e 100644
+--- a/sysdeps/generic/ldconfig.h
++++ b/sysdeps/generic/ldconfig.h
+@@ -42,6 +42,7 @@
+ #define FLAG_MIPS_LIB32_NAN2008		0x0c00
+ #define FLAG_MIPS64_LIBN32_NAN2008	0x0d00
+ #define FLAG_MIPS64_LIBN64_NAN2008	0x0e00
++#define FLAG_AARCH64_LIB32		0x0f00
+ 
+ /* Name of auxiliary cache.  */
+ #define _PATH_LDCONFIG_AUX_CACHE "/var/cache/ldconfig/aux-cache"
+diff --git a/sysdeps/unix/sysv/linux/aarch64/dl-cache.h b/sysdeps/unix/sysv/linux/aarch64/dl-cache.h
+index 32851d0..930aa20 100644
+--- a/sysdeps/unix/sysv/linux/aarch64/dl-cache.h
++++ b/sysdeps/unix/sysv/linux/aarch64/dl-cache.h
+@@ -18,7 +18,11 @@
+ 
+ #include <ldconfig.h>
+ 
++#ifdef __LP64__
+ #define _DL_CACHE_DEFAULT_ID    (FLAG_AARCH64_LIB64 | FLAG_ELF_LIBC6)
++#else
++#define _DL_CACHE_DEFAULT_ID    (FLAG_AARCH64_LIB32 | FLAG_ELF_LIBC6)
++#endif
+ 
+ #define _dl_cache_check_flags(flags)                    \
+   ((flags) == _DL_CACHE_DEFAULT_ID)
+@@ -27,18 +31,25 @@
+   do								\
+     {								\
+       size_t len = strlen (dir);				\
+-      char path[len + 3];					\
++      char path[len + 6];					\
+       memcpy (path, dir, len + 1);				\
+       if (len >= 6 && ! memcmp (path + len - 6, "/lib64", 6))	\
+ 	{							\
+ 	  len -= 2;						\
+ 	  path[len] = '\0';					\
+ 	}							\
++      if (len >= 9 && ! memcmp (path + len - 9, "/libilp32", 9))\
++	{							\
++	  len -= 5;						\
++	  path[len] = '\0';					\
++	}							\
+       add_dir (path);						\
+       if (len >= 4 && ! memcmp (path + len - 4, "/lib", 4))	\
+ 	{							\
+ 	  memcpy (path + len, "64", 3);				\
+ 	  add_dir (path);					\
++	  memcpy (path + len, "ilp32", 6);			\
++	  add_dir (path);					\
+ 	}							\
+     } while (0)
+ 
+diff --git a/sysdeps/unix/sysv/linux/arm/readelflib.c b/sysdeps/unix/sysv/linux/arm/readelflib.c
+index a15ebe4..e255fb0 100644
+--- a/sysdeps/unix/sysv/linux/arm/readelflib.c
++++ b/sysdeps/unix/sysv/linux/arm/readelflib.c
+@@ -41,7 +41,9 @@ process_elf_file (const char *file_name, const char *lib, int *flag,
+       ret = process_elf32_file (file_name, lib, flag, osversion, soname,
+ 				file_contents, file_length);
+ 
+-      if (!ret && EF_ARM_EABI_VERSION (elf32_header->e_flags) == EF_ARM_EABI_VER5)
++      if (!ret && elf_header->e_machine == EM_AARCH64)
++	*flag = FLAG_AARCH64_LIB32|FLAG_ELF_LIBC6;
++      else if (!ret && EF_ARM_EABI_VERSION (elf32_header->e_flags) == EF_ARM_EABI_VER5)
+ 	{
+ 	  if (elf32_header->e_flags & EF_ARM_ABI_FLOAT_HARD)
+ 	    *flag = FLAG_ARM_LIBHF|FLAG_ELF_LIBC6;
+-- 
+1.9.3
+

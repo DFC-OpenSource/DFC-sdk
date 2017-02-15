@@ -1,0 +1,36 @@
+verification: subunit2json fail to open result file
+
+Command "rally verify start" gives the following error:
+
+TRACE rally   File "/usr/lib64/python2.7/site-packages/rally/verification/verifiers/tempest/subunit2json.py", line 113, in stopTestRun
+TRACE rally     with open(self.results_file, 'wb') as results_file:
+TRACE rally TypeError: coercing to Unicode: need string or buffer, int found
+
+Python open() requires a string but not file discriptor number.
+
+Signed-off-by: Vu Tran <vu.tran@windriver.com>
+
+diff --git a/rally/verification/verifiers/tempest/subunit2json.py b/rally/verification/verifiers/tempest/subunit2json.py
+index 719f814..f74b13c 100644
+--- a/rally/verification/verifiers/tempest/subunit2json.py
++++ b/rally/verification/verifiers/tempest/subunit2json.py
+@@ -137,7 +137,7 @@ class FileAccumulator(testtools.StreamResult):
+ 
+ 
+ def main(subunit_log_file):
+-    results_file, _ = tempfile.mkstemp()
++    _, results_file = tempfile.mkstemp()
+     result = JsonOutput(results_file)
+     stream = open(subunit_log_file, 'rb')
+ 
+@@ -161,8 +161,8 @@ def main(subunit_log_file):
+         suite = subunit.ProtocolTestCase(bytes_io)
+         suite.run(result)
+     result.stopTestRun()
+-    with open(results_file, 'rb') as results_file:
+-        data = results_file.read()
++    with open(results_file, 'rb') as results_file_fd:
++        data = results_file_fd.read()
+     try:
+         os.unlink(results_file)
+     except OSError as e:

@@ -1,0 +1,64 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:
+# Required-Start: $remote_fs $network $syslog
+# Required-Stop: $remote_fs $syslog
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: Nova Test Config
+# Description: OpenStack Nova Test Config
+### END INIT INFO
+
+
+NOVA_CONF_FILE="/etc/nova/nova.conf"
+temp_file="/tmp/do_note_delete_me.temp"
+
+
+function get_field() {
+    while read data; do
+        if [ "$1" -lt 0 ]; then
+            field="(\$(NF$1))"
+        else
+            field="\$$(($1 + 1))"
+        fi
+        echo "$data" | awk -F'[ \t]*\\|[ \t]*' "{print $field}"
+    done
+}
+
+start()
+{
+    if [ -e $NOVA_CONF_FILE ]; then
+        sleep 5
+        source /etc/nova/openrc
+        nova floating-ip-pool-list > $temp_file 2>&1
+        if [ "$?" != "0" ]; then
+            echo "Nova service is not running"
+            exit 1
+        fi
+        line=`sed -n '4p' < $temp_file`
+        if [ "$line" != "+------+" ]; then
+            pool_name=`echo $line | get_field 1`
+            sed -i "s/^default_floating_pool = .*/default_floating_pool = ${pool_name}/" $NOVA_CONF_FILE
+            /etc/init.d/nova-api restart
+        else
+            echo "ERROR: There is no floating IP pool"
+        fi
+        rm -f $temp_file > /dev/null 2>&1
+    fi
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop|force-reload|restart|reload|status)
+        echo "WARNING: command $1 is not supported"
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|force-reload|restart|reload|status}"
+        exit 1
+        ;;
+esac
+
+exit 0

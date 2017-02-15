@@ -1,0 +1,112 @@
+From dade75d1ce25df6ab61867250d7adb65b4912090 Mon Sep 17 00:00:00 2001
+From: Bruce Ashfield <bruce.ashfield@windriver.com>
+Date: Fri, 2 Aug 2013 11:38:43 -0400
+Subject: [PATCH] tools: add libvirt-net-rpc to virt-host-validate when TLS is
+ enabled
+
+When gnu-tls is enabled for libvirt references to virNetTLSInit are
+generated in libvirt. Any binaries linking against libvirt, must also
+link against libvirt-net-rpc which provides the implementation.
+
+Signed-off-by: Bruce Ashfield <bruce.ashfield@windriver.com>
+---
+ examples/dominfo/Makefile.am      |  7 +++++++
+ examples/domsuspend/Makefile.am   |  7 +++++++
+ examples/hellolibvirt/Makefile.am |  7 +++++++
+ examples/openauth/Makefile.am     |  6 ++++++
+ tools/Makefile.am                 | 13 +++++++++++++
+ 5 files changed, 40 insertions(+)
+
+diff --git a/examples/dominfo/Makefile.am b/examples/dominfo/Makefile.am
+index 4a30c7768df9..99b3e17eb741 100644
+--- a/examples/dominfo/Makefile.am
++++ b/examples/dominfo/Makefile.am
+@@ -23,3 +23,10 @@ noinst_PROGRAMS=info1
+ info1_SOURCES=info1.c
+ info1_LDFLAGS=
+ info1_LDADD= $(LDADDS)
++
++if WITH_GNUTLS
++info1_LDADD += $(top_builddir)/src/libvirt-net-rpc.la  \
++               $(top_builddir)/gnulib/lib/libgnu.la    \
++               $(NULL)
++endif
++
+diff --git a/examples/domsuspend/Makefile.am b/examples/domsuspend/Makefile.am
+index b8e65f24a28d..9553e0f1d948 100644
+--- a/examples/domsuspend/Makefile.am
++++ b/examples/domsuspend/Makefile.am
+@@ -25,3 +25,10 @@ noinst_PROGRAMS=suspend
+ suspend_SOURCES=suspend.c
+ suspend_LDFLAGS=
+ suspend_LDADD= $(LDADDS)
++
++if WITH_GNUTLS
++suspend_LDADD += $(top_builddir)/src/libvirt-net-rpc.la  \
++                 $(top_builddir)/gnulib/lib/libgnu.la    \
++                 $(NULL)
++endif
++
+diff --git a/examples/hellolibvirt/Makefile.am b/examples/hellolibvirt/Makefile.am
+index 55ea972c42f8..a5272e2bb565 100644
+--- a/examples/hellolibvirt/Makefile.am
++++ b/examples/hellolibvirt/Makefile.am
+@@ -19,3 +19,10 @@ noinst_PROGRAMS = hellolibvirt
+ hellolibvirt_CFLAGS = $(WARN_CFLAGS)
+ hellolibvirt_SOURCES = hellolibvirt.c
+ hellolibvirt_LDADD = $(top_builddir)/src/libvirt.la
++
++if WITH_GNUTLS
++hellolibvirt_LDADD += $(top_builddir)/src/libvirt-net-rpc.la  \
++                      $(top_builddir)/gnulib/lib/libgnu.la    \
++                      $(NULL)
++endif
++
+diff --git a/examples/openauth/Makefile.am b/examples/openauth/Makefile.am
+index 7bb860491e73..34e9b47f65cb 100644
+--- a/examples/openauth/Makefile.am
++++ b/examples/openauth/Makefile.am
+@@ -19,3 +19,9 @@ noinst_PROGRAMS = openauth
+ openauth_CFLAGS = $(WARN_CFLAGS)
+ openauth_SOURCES = openauth.c
+ openauth_LDADD = $(top_builddir)/src/libvirt.la
++if WITH_GNUTLS
++openauth_LDADD += $(top_builddir)/src/libvirt-net-rpc.la  \
++                  $(top_builddir)/gnulib/lib/libgnu.la    \
++                  $(NULL)
++endif
++
+diff --git a/tools/Makefile.am b/tools/Makefile.am
+index 256a8f37a2a9..837a83fb612a 100644
+--- a/tools/Makefile.am
++++ b/tools/Makefile.am
+@@ -147,6 +147,13 @@ virt_host_validate_LDADD = \
+ 		../gnulib/lib/libgnu.la				\
+ 		$(NULL)
+ 
++if WITH_GNUTLS
++virt_host_validate_LDADD += ../src/libvirt-net-rpc.la \
++                            ../gnulib/lib/libgnu.la   \
++                            $(NULL)
++endif
++
++
+ virt_host_validate_CFLAGS = \
+ 		$(WARN_CFLAGS)					\
+ 		$(PIE_CFLAGS)					\
+@@ -214,6 +221,12 @@ virsh_CFLAGS =							\
+ 		$(READLINE_CFLAGS)
+ BUILT_SOURCES =
+ 
++if WITH_GNUTLS
++virsh_LDADD += ../src/libvirt-net-rpc.la \
++               ../gnulib/lib/libgnu.la   \
++               $(NULL)
++endif
++
+ if WITH_WIN_ICON
+ virsh_LDADD += virsh_win_icon.$(OBJEXT)
+ 
+-- 
+1.8.1.2
+

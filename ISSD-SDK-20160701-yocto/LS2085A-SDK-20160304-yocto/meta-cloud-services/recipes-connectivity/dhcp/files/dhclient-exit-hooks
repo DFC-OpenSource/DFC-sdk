@@ -1,0 +1,92 @@
+#!/bin/bash
+#
+# /etc/dhcp/dhclient-exit-hooks
+#
+# This file is sourced by /sbin/dhclient-script.
+#
+# dhcp option 121 is defined in RFC3442. The following is the link. 
+# http://www.ietf.org/rfc/rfc3442.txt
+#
+# The code for this option is 121, and its minimum length is 5 bytes.
+# This option can contain one or more static routes, each of which
+# consists of a destination descriptor and the IP address of the router
+# that should be used to reach that destination.
+#
+#    Code Len Destination 1    Router 1
+#   +-----+---+----+-----+----+----+----+----+----+
+#   | 121 | n | d1 | ... | dN | r1 | r2 | r3 | r4 |
+#   +-----+---+----+-----+----+----+----+----+----+
+#
+#    Destination 2       Router 2
+#   +----+-----+----+----+----+----+----+
+#   | d1 | ... | dN | r1 | r2 | r3 | r4 |
+#   +----+-----+----+----+----+----+----+
+#
+# In the above example, two static routes are specified.
+#
+# The following table contains some examples of how various subnet
+# number/mask combinations can be encoded:
+#
+#   Subnet number   Subnet mask      Destination descriptor
+#   0               0                0
+#   10.0.0.0        255.0.0.0        8.10
+#   10.0.0.0        255.255.255.0    24.10.0.0
+#   10.17.0.0       255.255.0.0      16.10.17
+#   10.27.129.0     255.255.255.0    24.10.27.129
+#   10.229.0.128    255.255.255.128  25.10.229.0.128
+#   10.198.122.47   255.255.255.255  32.10.198.122.47
+#
+# For metadata service, the following is a valid route from nova-api that
+# the VM instance can uses to retrieve metadata.
+#
+#   32 169 254 169 254 128 224 149 201
+#
+# In the above example, mask length of destination descriptor is always 32,
+# destination is always "169.254.169.254", and the gateway is a valid IP address.
+#
+# The add_routes function takes an array of unsigned integer 8, separated by spaces,
+# parse them, and added each of the routes into routing table.
+#
+
+function add_routes() {
+while [ $# -ne 0 ]; do
+  mask=$1
+  shift
+ 
+  # Parse the arguments into a CIDR net/mask string
+  if [ $mask -eq 32 ]; then
+    destination="-host $1.$2.$3.$4"
+    shift; shift; shift; shift
+  elif [ $mask -gt 24 ]; then
+    destination="-net $1.$2.$3.$4/$mask"
+    shift; shift; shift; shift
+  elif [ $mask -gt 16 ]; then
+    destination="-net $1.$2.$3.0/$mask"
+    shift; shift; shift
+  elif [ $mask -gt 8 ]; then
+    destination="-net $1.$2.0.0/$mask"
+    shift; shift
+  else
+    destination="-net $1.0.0.0/$mask"
+    shift
+  fi
+ 
+  # Read the gateway
+  gateway="$1.$2.$3.$4"
+  shift; shift; shift; shift
+
+  # Add route into routing table
+  route add $destination gw $gateway
+
+  # Print it out if the route is added successfully
+  if [ $? = 0 ]; then
+    echo "Added route \"$destination gw $gateway\""
+  fi
+done
+}
+
+# Call add_routes to add routes
+if [ "x$new_classless_static_routes" != x ]; then
+  add_routes $new_classless_static_routes
+fi
+

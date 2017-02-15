@@ -1,0 +1,36 @@
+From f7185bf731efd1015821f4153ac17d653dbd23c9 Mon Sep 17 00:00:00 2001
+From: Andrew Pinski <apinski@cavium.com>
+Date: Wed, 3 Sep 2014 14:19:02 -0700
+Subject: [PATCH 08/25] Allow a 32bit ABI to use the naming of the 64bit ABI
+ syscalls to avoid confusion of not splitting the registers
+
+In the ARM64 ILP32 case, we want to say the syscalls that normally would pass
+64bit as two arguments are now passing as one so want to use the 64bit
+naming scheme.
+
+Signed-off-by: Andrew Pinski <apinski@cavium.com>
+---
+ include/uapi/asm-generic/unistd.h | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/include/uapi/asm-generic/unistd.h b/include/uapi/asm-generic/unistd.h
+index 22749c1..5996166 100644
+--- a/include/uapi/asm-generic/unistd.h
++++ b/include/uapi/asm-generic/unistd.h
+@@ -883,8 +883,12 @@ __SYSCALL(__NR_fork, sys_ni_syscall)
+  * they take different names.
+  * Here we map the numbers so that both versions
+  * use the same syscall table layout.
++ * For 32bit abis where 64bit can be passed via one
++ * register, use the same naming as the 64bit ones
++ * as they will only have a 64 bit off_t.
+  */
+-#if __BITS_PER_LONG == 64 && !defined(__SYSCALL_COMPAT)
++#if (__BITS_PER_LONG == 64 && !defined(__SYSCALL_COMPAT)) || \
++	defined(__ARCH_WANT_64BIT_SYSCALLS)
+ #define __NR_fcntl __NR3264_fcntl
+ #define __NR_statfs __NR3264_statfs
+ #define __NR_fstatfs __NR3264_fstatfs
+-- 
+1.9.3
+

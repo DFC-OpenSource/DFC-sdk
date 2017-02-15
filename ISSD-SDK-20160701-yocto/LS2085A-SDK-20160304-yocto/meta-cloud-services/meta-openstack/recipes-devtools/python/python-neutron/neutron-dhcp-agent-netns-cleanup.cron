@@ -1,0 +1,2 @@
+# Periodically cleans Neutron's network namespaces on behalf of the Neutron DHCP agent.
+30 * * * * neutron if [ -x @bindir@/neutron-netns-cleanup ] ; then @bindir@/neutron-netns-cleanup --config-file=@confdir@/neutron/neutron.conf --config-file=@confdir@/neutron/dhcp_agent.ini >/dev/null 2>&1; fi

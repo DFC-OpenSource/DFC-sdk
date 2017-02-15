@@ -1,0 +1,136 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:          nova-compute
+# Required-Start:    $remote_fs $syslog
+# Required-Stop:     $remote_fs $syslog
+# Default-Start:     3 5
+# Default-Stop:      0 1 2 6
+# Short-Description: OpenStack Compute (Nova) - @suffix@
+# Description:       OpenStack Compute (Nova) - @suffix@
+### END INIT INFO
+
+SUFFIX="@suffix@"
+DESC="nova-@suffix@"
+DAEMON="/usr/bin/nova-$SUFFIX"
+PIDFILE="/var/run/nova/nova-$SUFFIX.pid"
+
+if [ ! -d /var/run/nova ]; then
+	mkdir -p /var/run/nova
+	chown nova:root /var/run/nova/
+fi
+
+if [ ! -d /var/lock/nova ]; then
+	mkdir -p /var/lock/nova
+	chown nova:root /var/lock/nova/
+fi
+
+if ! [ -x ${DAEMON} ] ; then
+	exit 0
+fi
+
+start ()
+{
+    if [ -e $PIDFILE ]; then
+        PIDDIR=/proc/$(cat $PIDFILE)
+        if [ -d ${PIDDIR} ]; then
+            echo "$DESC already running."
+            exit 1
+        else
+            echo "Removing stale PID file $PIDFILE"
+            rm -f $PIDFILE
+        fi
+    fi
+    PIDDIR=`dirname $PIDFILE`
+    if [ ! -d $PIDDIR ]; then
+        mkdir -p $PIDDIR
+        chown nova $PIDDIR
+    fi
+    if [ ! -d /var/log/nova ]; then
+    	mkdir /var/log/nova
+    fi
+    echo -n "Starting $DESC..."
+
+    start-stop-daemon --start --quiet --background \
+        --pidfile ${PIDFILE} --make-pidfile --exec ${DAEMON} \
+	-- --log-dir=/var/log/nova
+
+    if [ $? -eq 0 ]; then
+        echo "done."
+    else
+        echo "failed."
+    fi
+}
+
+stop ()
+{
+    echo -n "Stopping $DESC..."
+    start-stop-daemon --stop --quiet --pidfile $PIDFILE
+    if [ $? -eq 0 ]; then
+        echo "done."
+    else
+        echo "failed."
+    fi
+    rm -f $PIDFILE
+}
+
+status()
+{
+    pid=`cat $PIDFILE 2>/dev/null`
+    if [ -n "$pid" ]; then
+        if ps -p $pid > /dev/null 2>&1 ; then
+            echo "$DESC is running"
+            return
+        fi
+    fi
+    echo "$DESC is not running"
+}
+
+reset()
+{
+    . /etc/nova/openrc
+
+    # Nova comute
+    simple_delete "nova list --all-tenant" "nova delete" 1 "vm"
+
+    stop
+
+    # This is to make sure postgres is configured and running
+    if ! pidof postmaster > /dev/null; then
+       /etc/init.d/postgresql-init
+       /etc/init.d/postgresql start
+       sleep 5
+    fi
+
+    sudo -u postgres dropdb nova
+    sudo -u postgres createdb nova
+    sleep 2
+    nova-manage db sync
+
+    start
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart|force-reload|reload)
+        stop
+        start
+        ;;
+    status)
+	status
+        ;;
+    reset)
+	reset
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|force-reload|restart|reload|status|reset}"
+        exit 1
+        ;;
+esac
+
+exit 0

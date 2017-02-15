@@ -1,0 +1,117 @@
+Summary
+=======
+
+This document is intended to provide an overview of what metadata service is,
+how it works and how it is tested to ensure that metadata service is working correctly.
+
+Metadata Service Introduction
+=============================
+
+OpenStack Compute service uses a special metadata service to enable VM instances to retrieve instance-specific data (metadata). Instances access the metadata service at http://169.254.169.254. The metadata service supports two sets of APIs: an OpenStack metadata API and an EC2-compatible API. Each of the APIs is versioned by date.
+
+To retrieve a list of supported versions for the OpenStack metadata API, make a GET request to http://169.254.169.254/openstack.
+
+For example:
+$ curl http://169.254.169.254/openstack
+2012-08-10
+latest
+
+To list supported versions for the EC2-compatible metadata API, make a GET request to http://169.254.169.254.
+
+For example:
+$ curl http://169.254.169.254
+1.0
+2007-01-19
+2007-03-01
+2007-08-29
+2007-10-10
+2007-12-15
+2008-02-01
+2008-09-01
+2009-04-04
+latest
+
+If cloud-init is supported by the VM image, cloud-init can retrieve metadata from metadata service at instance initialization. 
+
+Metadata Service Implementation
+===============================
+
+Metadata service is provided by nova-api on controller at port 8775. VM instance requests metadata by 169.254.169.254 
+(eg, curl http://169.254.169.254/latest/meta-data). The requests from VM come to neutron-ns-metadata-proxy on controller
+in dhcp network name space, neutron-ns-metadata-proxy forwards the requests to neutron-metadata-agent through a unix domain 
+socket (/var/lib/neutron/metadata_proxy), and neutron-metadata-agent sends the request to nova-api on port 8775 to be serviced.
+
+Test Steps
+==========
+1. build controller and compute image as normal.
+2. setup a cloud with one controller and one compute on real hardware with a flat network.
+   - make sure controller and compute see each other by ping.
+3. on controller:
+   - checking metadata agent is running:
+     # ps -ef | grep neutron-metadata-agent
+   - create a network
+     example: 
+     # neutron net-create --provider:physical_network=ph-eth0 --provider:network_type=flat --router:external=True MY_NET
+   - create a subnet on the network just created
+     example: 
+     # neutron subnet-create MY_NET 128.224.149.0/24 --name MY_SUBNET --no-gateway --host-route destination=0.0.0.0/0,nexthop=128.224.149.1 --allocation-pool start=128.224.149.200,end=128.224.149.210
+   - create an image from cirros 0.3.2 (0.3.0 doesn't work properly due to a bug in it)
+     example: 
+     # glance image-create --name cirros-0.3.2 --is-public true --container-format bare --disk-format qcow2 --file cirros-0.3.2-x86_64-disk.img
+   - boot an instance from cirros-0.3.2 image
+     example: 
+     # nova boot --image cirros-0.3.2 --flavor 1 OpenStack_1 
+   - checking dhcp domain is created
+     # ip netns list
+     example output: 
+qdhcp-229dd93f-a3da-4a21-be22-49c3f3a5dbbd
+
+     # ip netns exec qdhcp-229dd93f-a3da-4a21-be22-49c3f3a5dbbd ip addr
+     example output:
+16: tap5dfe0d76-c5: <BROADCAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN 
+    link/ether fa:16:3e:c5:d9:65 brd ff:ff:ff:ff:ff:ff
+    inet 128.224.149.201/24 brd 128.224.149.255 scope global tap5dfe0d76-c5
+    inet 169.254.169.254/16 brd 169.254.255.255 scope global tap5dfe0d76-c5
+    inet6 fe80::f816:3eff:fec5:d965/64 scope link 
+       valid_lft forever preferred_lft forever
+17: lo: <LOOPBACK,UP,LOWER_UP> mtu 16436 qdisc noqueue state UNKNOWN 
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+18: sit0: <NOARP> mtu 1480 qdisc noop state DOWN 
+    link/sit 0.0.0.0 brd 0.0.0.0
+
+     # ip netns exec qdhcp-229dd93f-a3da-4a21-be22-49c3f3a5dbbd netstat -anpe
+     - ensure 0.0.0.0:80 is in there
+     example output:
+Active Internet connections (servers and established)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State       User       Inode       PID/Program name
+tcp        0      0 128.224.149.201:53      0.0.0.0:*               LISTEN      0          159928      8508/dnsmasq    
+tcp        0      0 169.254.169.254:53      0.0.0.0:*               LISTEN      0          159926      8508/dnsmasq    
+tcp        0      0 0.0.0.0:80              0.0.0.0:*               LISTEN      0          164930      8522/python     
+tcp6       0      0 fe80::f816:3eff:fec5:53 :::*                    LISTEN      65534      161016      8508/dnsmasq    
+udp        0      0 128.224.149.201:53      0.0.0.0:*                           0          159927      8508/dnsmasq    
+udp        0      0 169.254.169.254:53      0.0.0.0:*                           0          159925      8508/dnsmasq    
+udp        0      0 0.0.0.0:67              0.0.0.0:*                           0          159918      8508/dnsmasq    
+udp6       0      0 fe80::f816:3eff:fec5:53 :::*                                65534      161015      8508/dnsmasq    
+Active UNIX domain sockets (servers and established)
+Proto RefCnt Flags       Type       State         I-Node   PID/Program name    Path
+unix  2      [ ]         DGRAM                    37016    8508/dnsmasq        
+
+4. on VM instance:
+   - check instance log, ensure the instance gets a dhcp IP address and a static route, as well as the instance-id 
+   - login to the instance, and do the following test
+     $ hostname
+       the host name should be the name specified in "nova boot" when instance is created.
+     $ ifconfig
+       it should have a valid IP on eth0 in the range specified in "neutron subnet-create" when subnet is created.
+     $ route
+       there should be an entry for "169.254.169.254 x.x.x.x 255.255.255.255 eth0"
+     $ curl http://169.254.169.254/latest/meta-data
+       it should return a list of metadata (hostname, instance-id, etc).
+     $ nova reboot <instance>, nova stop <instance>, nova start <instance>, nova rebuild <instance> <image>
+       metadata should be working
+     $ nova boot --user-data <userdata.txt> --image <image> --flavor 1 <instance>
+       curl http://169.254.169.254/latest/user-data should retrieve the userdata.txt
+

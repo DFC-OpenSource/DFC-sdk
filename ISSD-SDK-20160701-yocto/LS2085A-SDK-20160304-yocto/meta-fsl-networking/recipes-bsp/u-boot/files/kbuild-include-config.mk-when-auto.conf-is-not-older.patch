@@ -1,0 +1,57 @@
+From 5458df5fdc209fa1718e612f2f024720e0b526f3 Mon Sep 17 00:00:00 2001
+From: Masahiro Yamada <yamada.masahiro@socionext.com>
+Date: Fri, 3 Apr 2015 12:30:25 +0900
+Subject: [PATCH] kbuild: include config.mk when auto.conf is not older than
+ .config
+
+Since the Kconfig conversion, config.mk has been included only when
+include/config/auto.conf is newer than the .config file.
+
+It causes build error if both files have the same time-stamps.
+It is actually possible because EXT* file systems have a 1s time-stamp
+resolution.
+
+The config.mk should be included when include/config/auto.conf is
+*not older* than the .config file.
+
+Signed-off-by: Masahiro Yamada <yamada.masahiro@socionext.com>
+Reported-by: Tom Rini <trini@konsulko.com>
+Reported-by: York Sun <yorksun@freescale.com>
+Reported-by: Stephen Warren <swarren@nvidia.com>
+Reported-by: Matthew Gerlach <mgerlach@opensource.altera.com>
+Tested-by: Stephen Warren <swarren@nvidia.com>
+Change-Id: If44dc727aa344c83478f156023416ba7301c473e
+Reviewed-on: http://git.am.freescale.net:8181/34875
+Tested-by: Review Code-CDREVIEW <CDREVIEW@freescale.com>
+Reviewed-by: Prabhakar Kushwaha <prabhakar@freescale.com>
+---
+ Makefile | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index ca98b3e..9995e00 100644
+--- a/Makefile
++++ b/Makefile
+@@ -499,12 +499,16 @@ include/config/%.conf: $(KCONFIG_CONFIG) include/config/auto.conf.cmd
+ # is up-to-date. When we switch to a different board configuration, old CONFIG
+ # macros are still remaining in include/config/auto.conf. Without the following
+ # gimmick, wrong config.mk would be included leading nasty warnings/errors.
+-autoconf_is_current := $(if $(wildcard $(KCONFIG_CONFIG)),$(shell find . \
+-		-path ./include/config/auto.conf -newer $(KCONFIG_CONFIG)))
+-ifneq ($(autoconf_is_current),)
++ifneq ($(wildcard $(KCONFIG_CONFIG)),)
++ifneq ($(wildcard include/config/auto.conf),)
++autoconf_is_old := $(shell find . -path ./$(KCONFIG_CONFIG) -newer \
++						include/config/auto.conf)
++ifeq ($(autoconf_is_old),)
+ include $(srctree)/config.mk
+ include $(srctree)/arch/$(ARCH)/Makefile
+ endif
++endif
++endif
+ 
+ # If board code explicitly specified LDSCRIPT or CONFIG_SYS_LDSCRIPT, use
+ # that (or fail if absent).  Otherwise, search for a linker script in a
+-- 
+1.9.2
+

@@ -1,0 +1,48 @@
+#!/bin/sh
+# run-postinsts
+#
+# Copyright (c) 2014 Wind River Systems, Inc.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+#
+# After chefsolo generates our config and scripts, we call this script
+# to run the posinstall script and start the services
+#
+#
+source /opt/deploychef/deploychef-inc
+#Run postinsts scripts
+#execute_all_postinsts
+#The registration of tenants/user/services has moved from the postinstall
+#scriptis to a single setup file; /etc/keystone/service-user-setup, which 
+#handles the registration through /etc/keystone/identity.sh script.  
+#Therefore, execute /etc/init.d/run-postinsts which in-turn runs this script.
+if [ -f /etc/keystone/service-user-setup ]; then
+    #Remove stale tenants/users/services
+    rm -f /etc/keystone/service-user-setup
+fi
+if [ -e /etc/init.d/run-postinsts  ]; then
+    echo "Running postinstall scripts" >> $LOG_FILE
+    sh -c /etc/init.d/run-postinsts
+else
+    echo "EEROR: Tenants/users/services not registered with Keystone" >> $LOG_FILE
+fi
+#Start all the modules specified in startup-list
+start_stop_services 'startup-list'
+#Restart cloud service cloud-init
+/etc/init.d/cloud-init start

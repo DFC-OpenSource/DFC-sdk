@@ -1,0 +1,28 @@
+---
+ cinder/compute/nova.py |    8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+--- a/cinder/compute/nova.py
++++ b/cinder/compute/nova.py
+@@ -57,6 +57,13 @@
+ CONF = cfg.CONF
+ CONF.register_opts(nova_opts)
+ 
++nova_client_opts = [
++    cfg.IntOpt('max_timing_buffer',
++               default=200,
++               help='The max number of the timing objects to keep'),
++]
++cfg.CONF.register_opts(nova_client_opts, group="nova_client")
++
+ LOG = logging.getLogger(__name__)
+ 
+ 
+@@ -106,6 +113,7 @@
+                            insecure=CONF.nova_api_insecure,
+                            cacert=CONF.nova_ca_certificates_file,
+                            extensions=extensions)
++    c.set_timings_max_len(cfg.CONF.nova_client.max_timing_buffer)
+     # noauth extracts user_id:project_id from auth_token
+     c.client.auth_token = context.auth_token or '%s:%s' % (context.user_id,
+                                                            context.project_id)

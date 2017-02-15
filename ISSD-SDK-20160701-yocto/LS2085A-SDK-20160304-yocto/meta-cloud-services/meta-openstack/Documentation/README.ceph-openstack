@@ -1,0 +1,575 @@
+Summary
+=======
+
+This document is not intended to provide detail of how Ceph in general works
+(please refer to addons/wr-ovp/layers/ovp/Documentation/README_ceph.pdf
+document for such a detail),  but rather, it highlights the details of how
+Ceph cluster is setup and OpenStack is configured to allow various Openstack
+components interact with Ceph.
+
+
+Ceph Cluster Setup
+==================
+
+By default Ceph cluster is setup to have the followings:
+
+* Ceph monitor daemon running on Controller node
+* Two Ceph OSD (osd.0 and osd.1) daemons running on Controller node.
+  The underneath block devices for these 2 OSDs are loopback block devices.
+  The size of the backing up loopback files is 10Gbytes by default and can
+  be changed at compile time through variable CEPH_BACKING_FILE_SIZE.
+* No Ceph MSD support
+* Cephx authentication is enabled
+
+This is done through script /etc/init.d/ceph-setup.  This script is
+run when system is booting up.  Therefore, Ceph cluster should ready
+for use after booting, and no additional manual step is required.
+
+With current Ceph setup, only Controller node is able to run Ceph
+commands which requires Ceph admin installed (file /etc/ceph/ceph.client.admin.keyring
+exists).  If it's desired to have node other than Controller (e.g. Compute node)
+to be able to run Ceph command, then keyring for at a particular Ceph client
+must be created and transfered from Controller node to that node.  There is a
+convenient tool for doing so in a secure manner.  On Controller node, run:
+
+    $ /etc/ceph/ceph_xfer_keyring.sh -h
+    $ /etc/ceph/ceph_xfer_keyring.sh <key name> <remote login> [remote location]
+
+The way Ceph cluster is setup is mainly for demonstration purpose.  One might
+wants to have a different Ceph cluster setup than this setup (e.g. using real
+hardware block devivce instead of loopback devices).
+
+
+Setup Ceph's Pool and Client Users To Be Used By OpenStack
+==========================================================
+
+After Ceph cluster is up and running, some specific Ceph pools and
+Ceph client users must be created in order for Openstack components
+to be able to use Ceph.
+
+* Openstack cinder-volume component requires "cinder-volumes" pool
+  and "cinder-volume" client exist.
+* Openstack cinder-backups component requires "cinder-backups" pool
+  and "cinder-backup" client exist
+* Openstack Glance component requires "images" pool and "glance"
+  client exist
+* Openstack nova-compute component required "cinder-volumes" pool
+  and "cinder-volume" client exist.
+
+After system is booted up, all of these required pools and clients
+are created automatically through script /etc/ceph/ceph-openstack-setup.sh.
+
+
+Cinder-volume and Ceph
+======================
+
+Cinder-volume supports multiple backends including Ceph Rbd.  When a volume
+is created with "--volume_type cephrbd"
+
+    $ cinder create --volume_type cephrbd --display_name glusterfs_vol_1 1
+
+where "cephrbd" type can be created as following:
+
+    $ cinder type-create cephrbd
+    $ cinder type-key cephrbd set volume_backend_name=RBD_CEPH
+
+then Cinder-volume Ceph backend driver will store volume into Ceph's pool
+named "cinder-volumes".
+
+On controller node, to list what is in "cinder-volumes" pool:
+
+    $ rbd -p cinder-volumes ls
+    volume-b5294a0b-5c92-4b2f-807e-f49c5bc1896b
+
+The following configuration options in /etc/cinder/cinder.conf
+affect on how cinder-volume interact with Ceph cluster through
+cinder-volume ceph backend
+
+    volume_driver=cinder.volume.drivers.rbd.RBDDriver
+    rbd_pool=cinder-volumes
+    rbd_ceph_conf=/etc/ceph/ceph.conf
+    rbd_flatten_volume_from_snapshot=false
+    rbd_max_clone_depth=5
+    rbd_user=cinder-volume
+    volume_backend_name=RBD_CEPH
+
+
+Cinder-backup and Ceph
+======================
+
+Cinder-backup has ability to store volume backup into Ceph
+"volume-backups" pool with the following command:
+
+    $ cinder backup-create <cinder volume ID>
+
+where <cinder volume ID> is ID of an existing Cinder volume.
+
+Cinder-backup is not be able to create a backup for any cinder
+volume which backed by NFS or Glusterfs.  This is because NFS
+and Gluster cinder-volume backend drivers do not support the
+backup functionality.  In other words, only cinder volume
+backed by lvm-iscsi and ceph-rbd are able to be backed-up
+by cinder-backup.
+
+On controller node, to list what is in "cinder-backups" pool:
+
+    $ rbd -p "cinder-backups" ls
+
+The following configuration options in /etc/cinder/cinder.conf affect
+on how cinder-backup interacts with Ceph cluster:
+
+    backup_driver=cinder.backup.drivers.ceph
+    backup_ceph_conf=/etc/ceph/ceph.conf
+    backup_ceph_user=cinder-backup
+    backup_ceph_chunk_size=134217728
+    backup_ceph_pool=cinder-backups
+    backup_ceph_stripe_unit=0
+    backup_ceph_stripe_count=0
+    restore_discard_excess_bytes=true
+
+
+Glance and Ceph
+===============
+
+Glance can store images into Ceph pool "images" when "default_store = rbd"
+is set in /etc/glance/glance-api.conf.
+
+By default "default_store" has value of "file" which tells Glance to
+store images into local filesystem.  "default_store" value can be set
+during compile time through variable GLANCE_DEFAULT_STORE.
+
+The following configuration options in /etc/glance/glance-api.conf affect
+on how glance interacts with Ceph cluster:
+
+    default_store = rbd
+    rbd_store_ceph_conf = /etc/ceph/ceph.conf
+    rbd_store_user = glance
+    rbd_store_pool = images
+    rbd_store_chunk_size = 8
+
+
+Nova-compute and Ceph
+=====================
+
+On Controller node, when a VM is booted with command:
+
+    $ nova boot --image <glance image ID> ...
+
+then on Compute note, if "libvirt_images_type = default" (in /etc/nova/nova.conf),
+nova-compute will download the specified glance image from Controller node and
+stores it locally (on Compute node). If "libvirt_images_type = rbd" then
+nova-compute will import the specified glance image into "cinder-volumes" Ceph pool.
+
+By default, "libvirt_images_type" has value of "default" and it can be changed during
+compile time through variable LIBVIRT_IMAGES_TYPE.
+
+nova-compute underneath uses libvirt to spawn VMs.  If Ceph cinder volume is provided
+while booting VM with option "--block-device <options>", then a libvirt secret must be
+provided nova-compute to allow libvirt to authenticate with Cephx before libvirt is able
+to mount Ceph block device.  This libvirt secret is provided through "rbd_secret_uuid"
+option in /etc/nova/nova.conf.
+
+Therefore, on Compute node, if "libvirt_images_type = rbd" then the followings
+are required:
+
+    * /etc/ceph/ceph.client.cinder-volume.keyring exist.  This file contains
+      ceph client.cinder-volume's key, so that nova-compute can run some
+      restricted Ceph command allowed for cinder-volume Ceph client. For example:
+
+        $ rbd -p cinder-backups ls --id cinder-volume
+
+      should fail as "cinder-volume" Ceph client has no permission to touch
+      "cinder-backups" ceph pool.  And the following should work:
+
+        $ rbd -p cinder-volumes ls --id cinder-volume
+
+    * Also, there must be existing a libvirt secret which stores Ceph
+      client.cinder-volume's key.
+
+Right now, due to security and the booting order of Controller and Compute nodes,
+these 2 requirements are not automatically satisfied at the boot time.
+
+A script (/etc/ceph/set_nova_compute_cephx.sh) is provided to ease the task of
+transferring ceph.client.cinder-volume.keyring from Controller node to Compute
+node, and to create libvirt secret.  On Controller node, manually runs (just one time):
+
+    $ /etc/ceph/set_nova_compute_cephx.sh cinder-volume root@compute
+
+The following configuration options in /etc/glance/glance-api.conf affect
+on how nova-compute interacts with Ceph cluster:
+
+    libvirt_images_type = rbd
+    libvirt_images_rbd_pool=cinder-volumes
+    libvirt_images_rbd_ceph_conf=/etc/ceph/ceph.conf
+    rbd_user=cinder-volume
+    rbd_secret_uuid=<libvirt secret UUID>
+
+
+Ceph High Availability
+======================
+
+Ceph, by design, has strong high availability feature.  Each Ceph object
+can be replicated and stored into multiple independent physical disk
+storages (controlled by Ceph OSD daemons) which are either in the same
+machine or in separated machines.
+
+The number of replication is configurable.  In general, the higher the
+number of replication, the higher Ceph availability, however, the down
+side is the higher physical disk storage space required.
+
+Also in general, each Ceph object replication should be stored in
+different machines so that 1 machine goes down, the other replications
+are still available.
+
+Openstack default Ceph cluster is configured to have 2 replications.
+However, these 2 replications are stored into the same machine (which
+is Controller node).
+
+
+Testing Commands and Expected Results
+=====================================
+
+This section describes test steps and expected results to demonstrate that
+Ceph is integrated properly into OpenStack
+
+Please note: the following commands are carried on Controller node, unless
+otherwise explicitly indicated.
+
+    # Start Controller and Compute node in hardware targets
+
+    $ ps aux | grep ceph
+
+root      2986  0.0  0.0 1059856 22320 ?       Sl   02:50   0:08 /usr/bin/ceph-mon -i controller --pid-file /var/run/ceph/mon.controller.pid -c /etc/ceph/ceph.conf
+root      3410  0.0  0.2 3578292 153144 ?      Ssl  02:50   0:36 /usr/bin/ceph-osd -i 0 --pid-file /var/run/ceph/osd.0.pid -c /etc/ceph/ceph.conf
+root      3808  0.0  0.0 3289468 34428 ?       Ssl  02:50   0:36 /usr/bin/ceph-osd -i 1 --pid-file /var/run/ceph/osd.1.pid -c /etc/ceph/ceph.conf
+
+    $ ceph osd lspools
+
+0 data,1 metadata,2 rbd,3 cinder-volumes,4 cinder-backups,5 images,
+
+    $ neutron net-create mynetwork
+    $ neutron net-list
+
++--------------------------------------+-----------+---------+
+| id                                   | name      | subnets |
++--------------------------------------+-----------+---------+
+| 15157fda-0940-4eba-853d-52338ace3362 | mynetwork |         |
++--------------------------------------+-----------+---------+
+
+    $ glance image-create --name myfirstimage --is-public true --container-format bare --disk-format qcow2 --file /root/images/cirros-*-x86_64-disk.img
+    $ nova boot --image myfirstimage --flavor 1 myinstance
+    $ nova list
+
++--------------------------------------+------------+--------+------------+-------------+----------+
+| ID                                   | Name       | Status | Task State | Power State | Networks |
++--------------------------------------+------------+--------+------------+-------------+----------+
+| 26c2af98-dc78-465b-a6c2-bb52188d2b42 | myinstance | ACTIVE | -          | Running     |          |
++--------------------------------------+------------+--------+------------+-------------+----------+
+
+    $ nova delete 26c2af98-dc78-465b-a6c2-bb52188d2b42
+
++----+------+--------+------------+-------------+----------+
+| ID | Name | Status | Task State | Power State | Networks |
++----+------+--------+------------+-------------+----------+
++----+------+--------+------------+-------------+----------+
+
+    # Modify /etc/glance/glance-api.conf,
+      to change "default_store = file" to "default_store = rbd",
+    $ /etc/init.d/glance-api restart
+
+    # Modify /etc/cinder/cinder.conf,
+      to change "backup_driver=cinder.backup.drivers.ceph"
+    $ /etc/init.d/cinder-backup restart
+
+    $ /etc/cinder/add-cinder-volume-types.sh
+    $ cinder extra-specs-list
+
++--------------------------------------+-----------+------------------------------------------+
+|                  ID                  |    Name   |               extra_specs                |
++--------------------------------------+-----------+------------------------------------------+
+| 4cb4ae4a-600a-45fb-9332-aa72371c5985 | lvm_iscsi |  {u'volume_backend_name': u'LVM_iSCSI'}  |
+| 83b3ee5f-a6f6-4fea-aeef-815169ee83b9 | glusterfs |  {u'volume_backend_name': u'GlusterFS'}  |
+| c1570914-a53a-44e4-8654-fbd960130b8e |  cephrbd  |  {u'volume_backend_name': u'RBD_CEPH'}   |
+| d38811d4-741a-4a68-afe3-fb5892160d7c |    nfs    | {u'volume_backend_name': u'Generic_NFS'} |
++--------------------------------------+-----------+------------------------------------------+
+
+    $ glance image-create --name mysecondimage --is-public true --container-format bare --disk-format qcow2 --file /root/images/cirros-*-x86_64-disk.img
+    $ glance image-list
+
++--------------------------------------+---------------+-------------+------------------+---------+--------+
+| ID                                   | Name          | Disk Format | Container Format | Size    | Status |
++--------------------------------------+---------------+-------------+------------------+---------+--------+
+| bec1580e-2475-4d1d-8d02-cca53732d17b | myfirstimage  | qcow2       | bare             | 9761280 | active |
+| a223e5f7-a4b5-4239-96ed-a242db2a150a | mysecondimage | qcow2       | bare             | 9761280 | active |
++--------------------------------------+---------------+-------------+------------------+---------+--------+
+
+    $ rbd -p images ls
+
+a223e5f7-a4b5-4239-96ed-a242db2a150a
+
+    $ cinder create --volume_type lvm_iscsi --image-id a223e5f7-a4b5-4239-96ed-a242db2a150a --display_name=lvm_vol_2 1
+    $ cinder create --volume_type lvm_iscsi --display_name=lvm_vol_1 1
+    $ cinder create --volume_type nfs --display_name nfs_vol_1 1
+    $ cinder create --volume_type glusterfs --display_name glusterfs_vol_1 1
+    $ cinder create --volume_type cephrbd --display_name cephrbd_vol_1 1
+    $ cinder list
+
++--------------------------------------+-----------+-----------------+------+-------------+----------+-------------+
+|                  ID                  |   Status  |   Display Name  | Size | Volume Type | Bootable | Attached to |
++--------------------------------------+-----------+-----------------+------+-------------+----------+-------------+
+| 4a32a4fb-b670-4ed7-8dc8-f4e6f9b52db3 | available |    lvm_vol_2    |  1   |  lvm_iscsi  |   true   |             |
+| b0805546-be7a-4908-b1d5-21202fe6ea79 | available | glusterfs_vol_1 |  1   |  glusterfs  |  false   |             |
+| c905b9b1-10cb-413b-a949-c86ff3c1c4c6 | available |  cephrbd_vol_1  |  1   |   cephrbd   |  false   |             |
+| cea76733-b4ce-4e9a-9bfb-24cc3066070f | available |    nfs_vol_1    |  1   |     nfs     |  false   |             |
+| e85a0e2c-6dc4-4182-ab7d-f3950f225ee4 | available |    lvm_vol_1    |  1   |  lvm_iscsi  |  false   |             |
++--------------------------------------+-----------+-----------------+------+-------------+----------+-------------+
+
+    $ rbd -p cinder-volumes ls
+
+volume-c905b9b1-10cb-413b-a949-c86ff3c1c4c6
+
+(This uuid matches with the one in cinder list above)
+
+    $ cinder backup-create e85a0e2c-6dc4-4182-ab7d-f3950f225ee4
+    (create a backup for lvm-iscsi volume)
+
+    $ cinder backup-create cea76733-b4ce-4e9a-9bfb-24cc3066070f
+    (create a backup for nfs volume, this should fails, as nfs volume
+     does not support volume backup)
+
+    $ cinder backup-create c905b9b1-10cb-413b-a949-c86ff3c1c4c6
+    (create a backup for ceph volume)
+
+    $ cinder backup-create b0805546-be7a-4908-b1d5-21202fe6ea79
+    (create a backup for gluster volume, this should fails, as glusterfs volume
+     does not support volume backup)
+
+    $ cinder backup-list
+
++--------------------------------------+--------------------------------------+-----------+------+------+--------------+----------------+
+|                  ID                  |              Volume ID               |   Status  | Name | Size | Object Count |   Container    |
++--------------------------------------+--------------------------------------+-----------+------+------+--------------+----------------+
+| 287502a0-aa4d-4065-93e0-f72fd5c239f5 | cea76733-b4ce-4e9a-9bfb-24cc3066070f |   error   | None |  1   |     None     |      None      |
+| 2b0ca8a7-a827-4f1c-99d5-4fb7d9f25b5c | e85a0e2c-6dc4-4182-ab7d-f3950f225ee4 | available | None |  1   |     None     | cinder-backups |
+| 32d10c06-a742-45d6-9e13-777767ff5545 | c905b9b1-10cb-413b-a949-c86ff3c1c4c6 | available | None |  1   |     None     | cinder-backups |
+| e2bdf21c-d378-49b3-b5e3-b398964b925c | b0805546-be7a-4908-b1d5-21202fe6ea79 |   error   | None |  1   |     None     |      None      |
++--------------------------------------+--------------------------------------+-----------+------+------+--------------+----------------+
+
+    $ rbd -p cinder-backups ls
+
+volume-0c3f82ea-b3df-414e-b054-7a4977b7e354.backup.94358fed-6bd9-48f1-b67a-4d2332311a1f
+volume-219a3250-50b4-4db0-9a6c-55e53041b65e.backup.base
+
+(There should be only 2 backup volumes in the ceph cinder-backups pool)
+
+    $ On Compute node: rbd -p cinder-volumes --id cinder-volume ls
+
+2014-03-17 13:03:54.617373 7f8673602780 -1 monclient(hunting): ERROR: missing keyring, cannot use cephx for authentication
+2014-03-17 13:03:54.617378 7f8673602780  0 librados: client.admin initialization error (2) No such file or directory
+rbd: couldn't connect to the cluster!
+
+(This should fails as compute node does not have ceph cinder-volume keyring yet)
+
+    $ /bin/bash /etc/ceph/set_nova_compute_cephx.sh cinder-volume root@compute
+
+The authenticity of host 'compute (128.224.149.169)' can't be established.
+ECDSA key fingerprint is 6a:79:95:fa:d6:56:0d:72:bf:5e:cb:59:e0:64:f6:7a.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added 'compute,128.224.149.169' (ECDSA) to the list of known hosts.
+root@compute's password:
+Run virsh secret-define:
+Secret 96dfc68f-3528-4bd0-a226-17a0848b05da created
+
+Run virsh secret-set-value:
+Secret value set
+
+    $ On Compute node: rbd -p cinder-volumes --id cinder-volume ls
+
+volume-c905b9b1-10cb-413b-a949-c86ff3c1c4c6
+
+    # On Compute node: to allow nova-compute to save glance image into
+      ceph (by default it saves at the local filesystem /etc/nova/instances)
+
+      modify /etc/nova/nova.conf to change:
+
+      libvirt_images_type = default
+
+      into
+
+      libvirt_images_type = rbd
+
+    $ On Compute node: /etc/init.d/nova-compute restart
+
+    $ nova boot --flavor 1 \
+        --image mysecondimage \
+        --block-device source=volume,id=b0805546-be7a-4908-b1d5-21202fe6ea79,dest=volume,shutdown=preserve \
+        --block-device source=volume,id=c905b9b1-10cb-413b-a949-c86ff3c1c4c6,dest=volume,shutdown=preserve \
+        --block-device source=volume,id=cea76733-b4ce-4e9a-9bfb-24cc3066070f,dest=volume,shutdown=preserve \
+        --block-device source=volume,id=e85a0e2c-6dc4-4182-ab7d-f3950f225ee4,dest=volume,shutdown=preserve \
+         myinstance
+
+    $ rbd -p cinder-volumes ls
+
+instance-00000002_disk
+volume-219a3250-50b4-4db0-9a6c-55e53041b65e
+
+(We should see instance-000000xx_disk ceph object)
+
+    $ nova list
+
++--------------------------------------+------------+--------+------------+-------------+----------+
+| ID                                   | Name       | Status | Task State | Power State | Networks |
++--------------------------------------+------------+--------+------------+-------------+----------+
+| 2a6aeff9-5a35-45a1-b8c4-0730df2a767a | myinstance | ACTIVE | -          | Running     |          |
++--------------------------------------+------------+--------+------------+-------------+----------+
+
+    $ From dashboard, log into VM console run "cat /proc/partitions"
+
+Should be able to login and see vdb, vdc, vdd, vdde 1G block devices
+
+    $ nova delete 2a6aeff9-5a35-45a1-b8c4-0730df2a767a
+
+    $ nova list
+
++----+------+--------+------------+-------------+----------+
+| ID | Name | Status | Task State | Power State | Networks |
++----+------+--------+------------+-------------+----------+
++----+------+--------+------------+-------------+----------+
+
+    $ rbd -p cinder-volumes ls
+
+volume-c905b9b1-10cb-413b-a949-c86ff3c1c4c6
+
+(The instance instance-00000010_disk should be gone)
+
+    $ nova boot --flavor 1 \
+        --image mysecondimage \
+        --block-device source=volume,id=b0805546-be7a-4908-b1d5-21202fe6ea79,dest=volume,shutdown=preserve \
+        --block-device source=volume,id=c905b9b1-10cb-413b-a949-c86ff3c1c4c6,dest=volume,shutdown=preserve \
+        --block-device source=volume,id=cea76733-b4ce-4e9a-9bfb-24cc3066070f,dest=volume,shutdown=preserve \
+        --block-device source=volume,id=e85a0e2c-6dc4-4182-ab7d-f3950f225ee4,dest=volume,shutdown=preserve \
+         myinstance
+
+    $ nova list
+
++--------------------------------------+------------+--------+------------+-------------+----------+
+| ID                                   | Name       | Status | Task State | Power State | Networks |
++--------------------------------------+------------+--------+------------+-------------+----------+
+| c1866b5f-f731-4d9c-b855-7f82f3fb314f | myinstance | ACTIVE | -          | Running     |          |
++--------------------------------------+------------+--------+------------+-------------+----------+
+
+    $ From dashboard, log into VM console run "cat /proc/partitions"
+
+Should be able to login and see vdb, vdc, vdd, vdde 1G block devices
+
+    $ nova delete c1866b5f-f731-4d9c-b855-7f82f3fb314f
+    $ nova list
+
++----+------+--------+------------+-------------+----------+
+| ID | Name | Status | Task State | Power State | Networks |
++----+------+--------+------------+-------------+----------+
++----+------+--------+------------+-------------+----------+
+
+    $ cinder list
+
++--------------------------------------+-----------+-----------------+------+-------------+----------+-------------+
+|                  ID                  |   Status  |   Display Name  | Size | Volume Type | Bootable | Attached to |
++--------------------------------------+-----------+-----------------+------+-------------+----------+-------------+
+| 4a32a4fb-b670-4ed7-8dc8-f4e6f9b52db3 | available |    lvm_vol_2    |  1   |  lvm_iscsi  |   true   |             |
+| b0805546-be7a-4908-b1d5-21202fe6ea79 | available | glusterfs_vol_1 |  1   |  glusterfs  |  false   |             |
+| c905b9b1-10cb-413b-a949-c86ff3c1c4c6 | available |  cephrbd_vol_1  |  1   |   cephrbd   |  false   |             |
+| cea76733-b4ce-4e9a-9bfb-24cc3066070f | available |    nfs_vol_1    |  1   |     nfs     |  false   |             |
+| e85a0e2c-6dc4-4182-ab7d-f3950f225ee4 | available |    lvm_vol_1    |  1   |  lvm_iscsi  |  false   |             |
++--------------------------------------+-----------+-----------------+------+-------------+----------+-------------+
+
+(All the volume should be available)
+
+    $ ceph -s
+
+    cluster 9afd3ca8-50e0-4f71-9fc0-e9034d14adf0
+     health HEALTH_OK
+     monmap e1: 1 mons at {controller=128.224.149.168:6789/0}, election epoch 2, quorum 0 controller
+     osdmap e22: 2 osds: 2 up, 2 in
+      pgmap v92: 342 pgs, 6 pools, 9532 kB data, 8 objects
+            2143 MB used, 18316 MB / 20460 MB avail
+                 342 active+clean
+
+(Should see "health HEALTH_OK" which indicates Ceph cluster is all good)
+
+    $ nova boot --flavor 1 \
+        --image myfirstimage \
+        --block-device source=volume,id=c905b9b1-10cb-413b-a949-c86ff3c1c4c6,dest=volume,shutdown=preserve \
+         myinstance
+
+(Booting VM with only existing CephRBD Cinder volume as block device)
+
+    $ nova list
+
++--------------------------------------+------------+--------+------------+-------------+----------+
+| ID                                   | Name       | Status | Task State | Power State | Networks |
++--------------------------------------+------------+--------+------------+-------------+----------+
+| 4e984fd0-a0af-435f-84a1-ecd6b24b7256 | myinstance | ACTIVE | -          | Running     |          |
++--------------------------------------+------------+--------+------------+-------------+----------+
+
+    $ From dashboard, log into VM console.  Assume that the second partition (CephRbd)
+      is /dev/vdb
+    $ On VM, run: "sudo mkfs.ext4 /dev/vdb && sudo mkdir ceph && sudo mount /dev/vdb ceph && sudo chmod 777 -R ceph"
+    $ On VM, run: "echo "Hello World" > ceph/test.log && dd if=/dev/urandom of=ceph/512M bs=1M count=512 && sync"
+    $ On VM, run: "cat ceph/test.log && sudo umount ceph"
+
+Hello World
+
+    $ /etc/init.d/ceph stop osd.0
+    $ On VM, run: "sudo mount /dev/vdb ceph && echo "Hello World" > ceph/test_1.log"
+    $ On VM, run: "cat ceph/test*.log && sudo umount ceph"
+
+Hello World
+Hello World
+
+    $ /etc/init.d/ceph start osd.0
+    # Wait until "ceph -s" shows "health HEALTH_OK"
+    $ /etc/init.d/ceph stop osd.1
+    $ On VM, run: "sudo mount /dev/vdb ceph && echo "Hello World" > ceph/test_2.log"
+    $ On VM, run: "cat ceph/test*.log && sudo umount ceph"
+
+Hello World
+Hello World
+Hello World
+
+    $ /etc/init.d/ceph stop osd.0
+(Both Ceph OSD daemons are down, so no Ceph Cinder volume available)
+
+    $ On VM, run "sudo mount /dev/vdb ceph"
+(Stuck mounting forever, as Ceph Cinder volume is not available)
+
+    $ /etc/init.d/ceph start osd.0
+    $ /etc/init.d/ceph start osd.1
+    # On VM, the previous mount should pass
+    $ On VM, run: "sudo mount /dev/vdb ceph && echo "Hello World" > ceph/test_3.log"
+    $ On VM, run: "cat ceph/test*.log && sudo umount ceph"
+
+Hello World
+Hello World
+Hello World
+Hello World
+
+    $ nova delete 4e984fd0-a0af-435f-84a1-ecd6b24b7256
+    $ cinder list
+
++--------------------------------------+-----------+-----------------+------+-------------+----------+-------------+
+|                  ID                  |   Status  |   Display Name  | Size | Volume Type | Bootable | Attached to |
++--------------------------------------+-----------+-----------------+------+-------------+----------+-------------+
+| 4a32a4fb-b670-4ed7-8dc8-f4e6f9b52db3 | available |    lvm_vol_2    |  1   |  lvm_iscsi  |   true   |             |
+| b0805546-be7a-4908-b1d5-21202fe6ea79 | available | glusterfs_vol_1 |  1   |  glusterfs  |  false   |             |
+| c905b9b1-10cb-413b-a949-c86ff3c1c4c6 | available |  cephrbd_vol_1  |  1   |   cephrbd   |  false   |             |
+| cea76733-b4ce-4e9a-9bfb-24cc3066070f | available |    nfs_vol_1    |  1   |     nfs     |  false   |             |
+| e85a0e2c-6dc4-4182-ab7d-f3950f225ee4 | available |    lvm_vol_1    |  1   |  lvm_iscsi  |  false   |             |
++--------------------------------------+-----------+-----------------+------+-------------+----------+-------------+
+
+(All the volume should be available)
+
+
+Additional References
+=====================
+
+* https://ceph.com/docs/master/rbd/rbd-openstack/

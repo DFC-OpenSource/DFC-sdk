@@ -1,0 +1,4 @@
+define KFEATURE_DESCRIPTION "Enable tcp iscsi initiator"
+define KFEATURE_COMPATIBILITY board
+
+kconf non-hardware enable-iscsi-tcp.cfg

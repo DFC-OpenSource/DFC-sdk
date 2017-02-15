@@ -1,0 +1,335 @@
+Summary
+=======
+
+This document is not intended to provide detail of how Rally in general
+works, but rather it highlights how Rally is integrated/configured into
+meta-cloud-services and also describes how Rally is tested to ensure that
+Rally Verification and Benchmarking components are working correctly.
+
+
+Rally Overview
+==============
+
+Rally - OpenStack benchmarking at a scale - is intended to provide the
+community with a benchmarking tool that is capable of performing "specific",
+"complicated" and "reproducible" test cases on "real deployment" scenarios.
+
+Rally has 4 main components:
+
+* Server Providers - provides virtual servers
+* Deploy Engines - deploys OpenStack cloud on servers that are presented by Server Providers
+* Verification - runs tempest
+* Benchmarking - allows to write parameterized benchmark scenarios & run them against the cloud
+
+
+Rally Deployment
+================
+
+Rally is configured to use existing deployment (by using deployment configuration file
+/etc/rally/deployments/existing.json) and therefore Rally components "Server Providers"
+and "Deploy Engines" are not used heavily.
+
+
+Rally Verification
+==================
+
+By default, Rally verification performs the following steps:
+
+* git clone tempest source from upstream
+* setup virtualenv for this tempest
+* setup testr environment with virtualenv created above
+* create tempest.conf for this tempest
+* use testr and subunit.run module to run tempest
+
+However, meta-cloud-services already includes tempest which is also configured/modified
+to have low failure/error testcases, therefore it's desired to use this tempest
+(without using virtualenv) instead of letting Rally to download tempest and running it
+on virtualenv.
+
+The option "existing_tempest_config" in /etc/rally/rally.conf can be used to configure
+Rally to either use the existing tempest or to download from upstream.
+
+If the option "existing_tempest_config" is not set then Rally follows the default path.
+If "existing_tempest_config" is set to absolute path of tempest config folder (which
+contains tempest "tools" and .testr.conf, e.g. /etc/tempest) then Rally uses this
+existing tempest.  By default, "existing_tempest_config" is set to "/etc/tempest/".
+
+
+Build Configuration Options
+===========================
+
+To have Rally and tempest included in final built image, include layer
+meta-openstack-controller-test-config into Controller build and
+layer meta-openstack-compute-test-config into Compute build.
+
+
+Test Steps
+==========
+
+Please note: the following commands/steps are carried on Controller
+node, unless otherwise explicitly indicated.
+
+    # Start Controller and Compute node
+    $ ps aux | grep rally
+root     13954  4.2  0.0 130856 27500 ?        Ss   17:05   0:00 python /usr/bin/rally-api --log-dir=/var/log/rally
+
+    $ curl http://localhost:8877
+{"versions": [{"status": "CURRENT", "media_types": [{"base": "application/json", "type": "application/vnd.openstack.rally.v1+json"}], "id": "v1", "links": [{"href": "http://localhost:8877/v1", "rel": "self"}], "updated_at": "2014-01-07T00:00:00Z"}], "description": "Rally is a Benchmark-as-a-Service project for OpenStack.", "name": "OpenStack Rally API"}
+
+    $ rally deployment create --filename=/etc/rally/deployments/existing.json --name=wr-ops
++--------------------------------------+----------------------------+--------+------------------+--------+
+| uuid                                 | created_at                 | name   | status           | active |
++--------------------------------------+----------------------------+--------+------------------+--------+
+| 5cdc0ae5-03bd-4bba-bb7b-c43d1e295bdb | 2014-07-07 17:09:11.160741 | wr-ops | deploy->finished |        |
++--------------------------------------+----------------------------+--------+------------------+--------+
+
+    $ rally deployment list
++--------------------------------------+----------------------------+--------+------------------+--------+
+| uuid                                 | created_at                 | name   | status           | active |
++--------------------------------------+----------------------------+--------+------------------+--------+
+| 5cdc0ae5-03bd-4bba-bb7b-c43d1e295bdb | 2014-07-07 17:09:11.160741 | wr-ops | deploy->finished | *      |
++--------------------------------------+----------------------------+--------+------------------+--------+
+
+    $ rally use deployment --uuid=5cdc0ae5-03bd-4bba-bb7b-c43d1e295bdb
+Using deployment: 5cdc0ae5-03bd-4bba-bb7b-c43d1e295bdb
+~/.rally/openrc was updated
+
+    $ rally deployment check
+keystone endpoints are valid and following services are available:
++------------+----------------+-----------+
+| services   | type           | status    |
++------------+----------------+-----------+
+| barbican   | keystore       | Available |
+| ceilometer | metering       | Available |
+| cinder     | volume         | Available |
+| ec2        | ec2            | Available |
+| glance     | image          | Available |
+| heat       | orchestration  | Available |
+| heat-cfn   | cloudformation | Available |
+| keystone   | identity       | Available |
+| neutron    | network        | Available |
+| nova       | compute        | Available |
+| swift      | object-store   | Available |
++------------+----------------+-----------+
+
+    $ rally show flavors
++----+-----------+-------+----------+-----------+-----------+
+| ID | Name      | vCPUs | RAM (MB) | Swap (MB) | Disk (GB) |
++----+-----------+-------+----------+-----------+-----------+
+| 1  | m1.tiny   | 1     | 512      |           | 1         |
+| 2  | m1.small  | 1     | 2048     |           | 20        |
+| 3  | m1.medium | 2     | 4096     |           | 40        |
+| 4  | m1.large  | 4     | 8192     |           | 80        |
+| 5  | m1.xlarge | 8     | 16384    |           | 160       |
++----+-----------+-------+----------+-----------+-----------+
+
+    $ rally show images
++--------------------------------------+--------------+----------+
+| UUID                                 | Name         | Size (B) |
++--------------------------------------+--------------+----------+
+| 3ec2f841-b179-47d7-908a-edb766b65c5e | myfirstimage | 13167616 |
++--------------------------------------+--------------+----------+
+
+    $ rally show keypairs
++------+-------------+
+| Name | Fingerprint |
++------+-------------+
++------+-------------+
+
+    $ rally show networks
++--------------------------------------+--------------------------------------------+------+
+| ID                                   | Label                                      | CIDR |
++--------------------------------------+--------------------------------------------+------+
+| 7a9cf643-d9ab-404e-8155-65134bd937fb | TEMPEST_NET                                | None |
++--------------------------------------+--------------------------------------------+------+
+
+    $ rally verify list
+There are no results from verifier. To run a verifier, use:
+rally verify start
+
+    $ rally verify start
+Configuring existing Tempest for deployment 5cdc0ae5-03bd-4bba-bb7b-c43d1e295bdb
+Verifier has been successfully configured to use existing Tempest
+tempest.api.network.test_extensions.ExtensionsTestXML
+    test_list_show_extensions[gate,smoke]                             FAIL
+setUpClass (tempest.api.network.test_networks
+    BulkNetworkOpsJSON)                                               FAIL
+tempest.api.orchestration.stacks.test_stacks.StacksTestJSON
+    test_stack_crud_no_resources[gate,smoke]                          OK  6.56
+    test_stack_list_responds[gate,smoke]                              OK  0.02
+setUpClass (tempest.api.network.test_load_balancer
+    LoadBalancerXML)                                                  FAIL
+tempest.api.compute.test_quotas.QuotasTestJSON
+    test_get_default_quotas[gate,smoke]                               OK  1.10
+    test_get_quotas[gate,smoke]                                       OK  0.02
+tempest.api.identity.admin.v3.test_domains.DomainsTestJSON
+    test_create_update_delete_domain[gate,smoke]                      OK  5.67
+
+...
+
+(Start Rally verification by running all on tempest testcases which are marked as smoke)
+
+    $ rally verify list
++--------------------------------------+--------------------------------------+----------+-------+----------+----------------------------+----------+
+| UUID                                 | Deployment UUID                      | Set name | Tests | Failures | Created at                 | Status   |
++--------------------------------------+--------------------------------------+----------+-------+----------+----------------------------+----------+
+| a5575bd2-d132-4522-b625-eed324396dda | 5cdc0ae5-03bd-4bba-bb7b-c43d1e295bdb | smoke    | 196   | 58       | 2014-07-07 17:14:35.926483 | finished |
++--------------------------------------+--------------------------------------+----------+-------+----------+----------------------------+----------+
+
+    $ rally verify show a5575bd2-d132-4522-b625-eed324396dda
+Total results of verification:
+
++--------------------------------------+--------------------------------------+----------+-------+----------+----------------------------+----------+
+| UUID                                 | Deployment UUID                      | Set name | Tests | Failures | Created at                 | Status   |
++--------------------------------------+--------------------------------------+----------+-------+----------+----------------------------+----------+
+| a5575bd2-d132-4522-b625-eed324396dda | 5cdc0ae5-03bd-4bba-bb7b-c43d1e295bdb | smoke    | 196   | 58       | 2014-07-07 17:14:35.926483 | finished |
++--------------------------------------+--------------------------------------+----------+-------+----------+----------------------------+----------+
+
+Tests:
+
++--------------------------------------------------------------------------------------------------------------------------------------------+------------+--------+
+| name                                                                                                                                       | time       | status |
++--------------------------------------------------------------------------------------------------------------------------------------------+------------+--------+
+| process-returncode                                                                                                                         | 0.0        | FAIL   |
+| setUpClass (tempest.api.compute.servers.test_create_server.ServersTestJSON)                                                                | 0.0        | FAIL   |
+| setUpClass (tempest.api.compute.servers.test_create_server.ServersTestManualDisk)                                                          | 0.0        | FAIL   |
+| setUpClass (tempest.api.compute.servers.test_create_server.ServersTestXML)                                                                 | 0.0        | FAIL   |
+| setUpClass (tempest.api.network.test_floating_ips.FloatingIPTestJSON)                                                                      | 0.0        | FAIL   |
+| setUpClass (tempest.api.network.test_floating_ips.FloatingIPTestXML)                                                                       | 0.0        | FAIL   |
+| setUpClass (tempest.api.network.test_load_balancer.LoadBalancerJSON)                                                                       | 0.0        | FAIL   |
+
+...
+
+    $ rally verify results a5575bd2-d132-4522-b625-eed324396dda
+(lot of details is printed out.  Just make sure that there is no error when running this command)
+
+    $ rally verify detailed a5575bd2-d132-4522-b625-eed324396dda
+(the out put is the same to the output of command "rally verify show" plus all the error/warning
+messages from running tempest)
+
+    $ rally verify start --set identity
+root@controller:~# rally verify start --set identity
+tempest.api.identity.admin.test_services.ServicesTestJSON
+    test_create_get_delete_service[gate,smoke]                        OK  1.06
+    test_list_services[gate,smoke]                                    OK  0.82
+tempest.api.identity.admin.v3.test_services.ServicesTestJSON
+    test_update_service[gate]                                         OK  3.65
+tempest.api.identity.admin.test_tenant_negative.TenantsNegativeTestJSON
+    test_create_tenant_by_unauthorized_user[gate,negative]            OK  1.71
+    test_create_tenant_request_without_token[gate,negative]           OK  0.73
+    test_create_tenant_with_empty_name[gate,negative]                 OK  0.89
+
+...
+
+(Start Rally verification by running all tempest testcases in tempest/api/identiy)
+
+    $ rally verify list
++--------------------------------------+--------------------------------------+----------+-------+----------+----------------------------+----------+
+| UUID                                 | Deployment UUID                      | Set name | Tests | Failures | Created at                 | Status   |
++--------------------------------------+--------------------------------------+----------+-------+----------+----------------------------+----------+
+| a5575bd2-d132-4522-b625-eed324396dda | 5cdc0ae5-03bd-4bba-bb7b-c43d1e295bdb | smoke    | 196   | 58       | 2014-07-07 17:14:35.926483 | finished |
+| b05bbc4c-eab4-4296-9020-d8305aa6457b | 5cdc0ae5-03bd-4bba-bb7b-c43d1e295bdb | identity | 216   | 0        | 2014-07-07 17:59:35.358702 | finished |
++--------------------------------------+--------------------------------------+----------+-------+----------+----------------------------+----------+
+
+    $ rally -v task start /etc/rally/tasks/example.json
+================================================================================
+Task  8bf6d40c-4ffb-4e3e-87c9-f078bfbc0b77 is started
+--------------------------------------------------------------------------------
+2014-07-07 18:06:30.608 9641 INFO rally.orchestrator.api [-] Benchmark Task 8bf6d40c-4ffb-4e3e-87c9-f078bfbc0b77 on Deployment 5cdc0ae5-03bd-4bba-bb7b-c43d1e295bdb
+2014-07-07 18:06:30.609 9641 INFO rally.benchmark.engine [-] Task 8bf6d40c-4ffb-4e3e-87c9-f078bfbc0b77 | Starting:  Check cloud.
+2014-07-07 18:06:30.766 9641 INFO rally.benchmark.engine [-] Task 8bf6d40c-4ffb-4e3e-87c9-f078bfbc0b77 | Completed: Check cloud.
+2014-07-07 18:06:30.766 9641 INFO rally.benchmark.engine [-] Task 8bf6d40c-4ffb-4e3e-87c9-f078bfbc0b77 | Starting:  Task validation.
+2014-07-07 18:06:30.785 9641 INFO rally.benchmark.engine [-] Task 8bf6d40c-4ffb-4e3e-87c9-f078bfbc0b77 | Starting:  Task validation of scenarios names.
+2014-07-07 18:06:30.788 9641 INFO rally.benchmark.engine [-] Task 8bf6d40c-4ffb-4e3e-87c9-f078bfbc0b77 | Completed: Task validation of scenarios names.
+2014-07-07 18:06:30.788 9641 INFO rally.benchmark.engine [-] Task 8bf6d40c-4ffb-4e3e-87c9-f078bfbc0b77 | Starting:  Task validation of syntax.
+
+...
+
+================================================================================
+Task 8bf6d40c-4ffb-4e3e-87c9-f078bfbc0b77 is finished.
+--------------------------------------------------------------------------------
+
+test scenario Authenticate.keystone
+args position 0
+args values:
+{u'context': {u'users': {u'concurrent': 30,
+                         u'tenants': 3,
+                         u'users_per_tenant': 50}},
+ u'runner': {u'concurrency': 5, u'times': 100, u'type': u'constant'}}
++-----------------------+-----------+-----------+-----------+---------------+---------------+---------+-------+
+| action                | min (sec) | avg (sec) | max (sec) | 90 percentile | 95 percentile | success | count |
++-----------------------+-----------+-----------+-----------+---------------+---------------+---------+-------+
+| authenticate.keystone | 0.449     | 0.695     | 1.375     | 1.131         | 1.223         | 100.0%  | 100   |
+| total                 | 0.449     | 0.695     | 1.375     | 1.131         | 1.223         | 100.0%  | 100   |
++-----------------------+-----------+-----------+-----------+---------------+---------------+---------+-------+
+
+(This test step runs a benchmarking Rally task defined by /etc/rally/tasks/example.json)
+
+    $ rally task list
++--------------------------------------+----------------------------+----------+--------+-----+
+| uuid                                 | created_at                 | status   | failed | tag |
++--------------------------------------+----------------------------+----------+--------+-----+
+| 8bf6d40c-4ffb-4e3e-87c9-f078bfbc0b77 | 2014-07-07 18:06:30.584805 | finished | False  |     |
++--------------------------------------+----------------------------+----------+--------+-----+
+
+    $ rally task detailed 8bf6d40c-4ffb-4e3e-87c9-f078bfbc0b77
+================================================================================
+Task 8bf6d40c-4ffb-4e3e-87c9-f078bfbc0b77 is finished.
+--------------------------------------------------------------------------------
+/etc/rally/tasks/example.json
+test scenario Authenticate.keystone
+args position 0
+args values:
+{u'context': {u'users': {u'concurrent': 30,
+                         u'tenants': 3,
+                         u'users_per_tenant': 50}},
+ u'runner': {u'concurrency': 5, u'times': 100, u'type': u'constant'}}
++-----------------------+-----------+-----------+-----------+---------------+---------------+---------+-------+
+| action                | min (sec) | avg (sec) | max (sec) | 90 percentile | 95 percentile | success | count |
++-----------------------+-----------+-----------+-----------+---------------+---------------+---------+-------+
+| authenticate.keystone | 0.449     | 0.695     | 1.375     | 1.131         | 1.223         | 100.0%  | 100   |
+| total                 | 0.449     | 0.695     | 1.375     | 1.131         | 1.223         | 100.0%  | 100   |
++-----------------------+-----------+-----------+-----------+---------------+---------------+---------+-------+
+
+    $ rally task plot2html 8bf6d40c-4ffb-4e3e-87c9-f078bfbc0b77 --out output.html
+    $ ls -l output.html
+-rw-r--r-- 1 root root 23028 Jul  7 18:12 output.html
+
+    # scp output.html into a host machine and use Browser on host machine to open
+      this ouput.html file.  A nice graphical report for this benchmark is displayed
+      on Browser.  Make sure the tale in Section "Table for task results" matches with
+      table printed out by "rally task detailed" above.
+
+
+Rally Built-In Unit Tests
+=========================
+
+This section describes how to run Rally built-in unit
+tests which are located at:
+
+    /usr/lib64/python2.7/site-packages/rally/tests
+    /usr/lib64/python2.7/site-packages/rally/tests_ci
+
+To run Rally built-in unit test with nosetests:
+
+    $ cd /usr/lib64/python2.7/site-packages/rally/tests
+    $ nosetests -v
+
+----------------------------------------------------------------------
+Ran 647 tests in 7.598s
+
+FAILED (errors=3, failures=2)
+
+    $ /usr/lib64/python2.7/site-packages/rally/tests_ci
+    $ nosetests -v
+
+----------------------------------------------------------------------
+Ran 1 test in 2.620s
+
+OK
+
+
+References
+==========
+
+https://wiki.openstack.org/wiki/Rally

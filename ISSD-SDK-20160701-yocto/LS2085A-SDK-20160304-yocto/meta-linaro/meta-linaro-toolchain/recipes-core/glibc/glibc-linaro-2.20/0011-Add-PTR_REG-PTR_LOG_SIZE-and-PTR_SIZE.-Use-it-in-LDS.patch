@@ -1,0 +1,159 @@
+From 25170f4bf230293bb299052ed57fa51f9c121a64 Mon Sep 17 00:00:00 2001
+From: Andrew Pinski <apinski@cavium.com>
+Date: Mon, 27 Oct 2014 00:59:34 -0700
+Subject: [PATCH 11/32] Add PTR_REG, PTR_LOG_SIZE, and PTR_SIZE. Use it in
+ LDST_PCREL and LDST_GLOBAL.
+
+This patch adds a few extra macros which are useful for ILP32 and updates
+PTR_MANGLE and PTR_DEMANGLE to use the some of the new macros.
+
+* sysdeps/aarch64/sysdep.h (PTR_REG): New macro.
+(PTR_LOG_SIZE): New macro.
+(PTR_SIZE): New macro.
+(LDST_PCREL): Use arguments as register numbers rather register names.
+Use PTR_REG for the register when loading.
+* sysdeps/unix/sysv/linux/aarch64/sysdep.h (PTR_MANGLE): Add a comment
+about that the arguments are register numbers rather register names.
+(PTR_DEMANGLE): Likewise.
+* sysdeps/aarch64/__longjmp.S (__longjmp): Update calls to PTR_DEMANGLE.
+* sysdeps/aarch64/setjmp.S (__sigsetjmp): Update calls to PTR_MANGLE.
+---
+ sysdeps/aarch64/__longjmp.S              |  4 ++--
+ sysdeps/aarch64/setjmp.S                 |  4 ++--
+ sysdeps/aarch64/sysdep.h                 | 28 ++++++++++++++++++----------
+ sysdeps/unix/sysv/linux/aarch64/sysdep.h |  8 ++++++--
+ 4 files changed, 28 insertions(+), 16 deletions(-)
+
+diff --git a/sysdeps/aarch64/__longjmp.S b/sysdeps/aarch64/__longjmp.S
+index 1bb7be36..e1a1cf2 100644
+--- a/sysdeps/aarch64/__longjmp.S
++++ b/sysdeps/aarch64/__longjmp.S
+@@ -53,7 +53,7 @@ ENTRY (__longjmp)
+ 	ldp	x27, x28, [x0, #JB_X27<<3]
+ #ifdef PTR_DEMANGLE
+ 	ldp	x29,  x4, [x0, #JB_X29<<3]
+-	PTR_DEMANGLE (x30, x4, x3, x2)
++	PTR_DEMANGLE (30, 4, 3, 2)
+ #else
+ 	ldp	x29, x30, [x0, #JB_X29<<3]
+ #endif
+@@ -98,7 +98,7 @@ ENTRY (__longjmp)
+ 	cfi_same_value(d15)
+ #ifdef PTR_DEMANGLE
+ 	ldr	x4, [x0, #JB_SP<<3]
+-	PTR_DEMANGLE (x5, x4, x3, x2)
++	PTR_DEMANGLE (5, 4, 3, 2)
+ #else
+ 	ldr	x5, [x0, #JB_SP<<3]
+ #endif
+diff --git a/sysdeps/aarch64/setjmp.S b/sysdeps/aarch64/setjmp.S
+index d548dd5..41d5321 100644
+--- a/sysdeps/aarch64/setjmp.S
++++ b/sysdeps/aarch64/setjmp.S
+@@ -42,7 +42,7 @@ ENTRY (__sigsetjmp)
+ 	stp	x27, x28, [x0, #JB_X27<<3]
+ 
+ #ifdef PTR_MANGLE
+-	PTR_MANGLE (x4, x30, x3, x2)
++	PTR_MANGLE (4, 30, 3, 2)
+ 	stp	x29,  x4, [x0, #JB_X29<<3]
+ #else
+ 	stp	x29, x30, [x0, #JB_X29<<3]
+@@ -57,7 +57,7 @@ ENTRY (__sigsetjmp)
+ 	stp	d14, d15, [x0, #JB_D14<<3]
+ #ifdef PTR_MANGLE
+ 	mov	x4, sp
+-	PTR_MANGLE (x5, x4, x3, x2)
++	PTR_MANGLE (5, 4, 3, 2)
+ 	str	x5, [x0, #JB_SP<<3]
+ #else
+ 	mov	x2,  sp
+diff --git a/sysdeps/aarch64/sysdep.h b/sysdeps/aarch64/sysdep.h
+index 55d1759..ab2ee91 100644
+--- a/sysdeps/aarch64/sysdep.h
++++ b/sysdeps/aarch64/sysdep.h
+@@ -23,10 +23,16 @@
+ 
+ #ifdef __LP64__
+ #define AARCH64_R(NAME)		R_AARCH64_ ## NAME
++#define PTR_REG(n)	x##n
++#define PTR_LOG_SIZE	3
+ #else
+ #define AARCH64_R(NAME)		R_AARCH64_P32_ ## NAME
++#define PTR_REG(n)	w##n
++#define PTR_LOG_SIZE	2
+ #endif
+ 
++#define PTR_SIZE	(1<<PTR_LOG_SIZE)
++
+ #ifdef	__ASSEMBLER__
+ 
+ /* Syntactic details of assembler.  */
+@@ -87,16 +93,18 @@
+ # define L(name)         .L##name
+ #endif
+ 
+-/* Load or store to/from a pc-relative EXPR into/from R, using T.  */
+-#define LDST_PCREL(OP, R, T, EXPR)  \
+-	adrp	T, EXPR;	    \
+-	OP	R, [T, #:lo12:EXPR];\
+-
+-/* Load or store to/from a got-relative EXPR into/from R, using T.  */
+-#define LDST_GLOBAL(OP, R, T, EXPR)     \
+-	adrp	T, :got:EXPR;		\
+-	ldr	T, [T, #:got_lo12:EXPR];\
+-	OP	R, [T];
++/* Load or store to/from a pc-relative EXPR into/from R, using T.
++   Note R and T are register numbers and not register names.  */
++#define LDST_PCREL(OP, R, T, EXPR)			\
++	adrp	x##T, EXPR;				\
++	OP	PTR_REG (R), [x##T, #:lo12:EXPR];	\
++
++/* Load or store to/from a got-relative EXPR into/from R, using T.
++   Note R and T are register numbers and not register names.  */
++#define LDST_GLOBAL(OP, R, T,  EXPR)			\
++	adrp	x##T, :got:EXPR;			\
++	ldr	PTR_REG (T), [x##T, #:got_lo12:EXPR];	\
++	OP	x##R, [x##T];
+ 
+ /* Since C identifiers are not normally prefixed with an underscore
+    on this system, the asm identifier `syscall_error' intrudes on the
+diff --git a/sysdeps/unix/sysv/linux/aarch64/sysdep.h b/sysdeps/unix/sysv/linux/aarch64/sysdep.h
+index 84999f1..fc31661 100644
+--- a/sysdeps/unix/sysv/linux/aarch64/sysdep.h
++++ b/sysdeps/unix/sysv/linux/aarch64/sysdep.h
+@@ -313,12 +313,14 @@
+      (!defined SHARED && (!defined NOT_IN_libc \
+ 			  || defined IS_IN_libpthread)))
+ # ifdef __ASSEMBLER__
++/* Note, dst, src, guard, and tmp are all register numbers rather than
++   register names so they will work with both ILP32 and LP64. */
+ #  define PTR_MANGLE(dst, src, guard, tmp)                                \
+   LDST_PCREL (ldr, guard, tmp, C_SYMBOL_NAME(__pointer_chk_guard_local)); \
+   PTR_MANGLE2 (dst, src, guard)
+ /* Use PTR_MANGLE2 for efficiency if guard is already loaded.  */
+ #  define PTR_MANGLE2(dst, src, guard)\
+-  eor dst, src, guard
++  eor x##dst, x##src, x##guard
+ #  define PTR_DEMANGLE(dst, src, guard, tmp)\
+   PTR_MANGLE (dst, src, guard, tmp)
+ #  define PTR_DEMANGLE2(dst, src, guard)\
+@@ -331,12 +333,14 @@ extern uintptr_t __pointer_chk_guard_local attribute_relro attribute_hidden;
+ # endif
+ #else
+ # ifdef __ASSEMBLER__
++/* Note, dst, src, guard, and tmp are all register numbers rather than
++   register names so they will work with both ILP32 and LP64. */
+ #  define PTR_MANGLE(dst, src, guard, tmp)                             \
+   LDST_GLOBAL (ldr, guard, tmp, C_SYMBOL_NAME(__pointer_chk_guard));   \
+   PTR_MANGLE2 (dst, src, guard)
+ /* Use PTR_MANGLE2 for efficiency if guard is already loaded.  */
+ #  define PTR_MANGLE2(dst, src, guard)\
+-  eor dst, src, guard
++  eor x##dst, x##src, x##guard
+ #  define PTR_DEMANGLE(dst, src, guard, tmp)\
+   PTR_MANGLE (dst, src, guard, tmp)
+ #  define PTR_DEMANGLE2(dst, src, guard)\
+-- 
+1.9.3
+

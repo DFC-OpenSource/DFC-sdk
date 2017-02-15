@@ -1,0 +1,66 @@
+heat_template_version: 2013-05-23
+description: AutoScaling
+parameters:
+  instance_type:
+    type: string
+    description: Type of the instance to be created.
+    default: m1.tiny
+    constraints:
+      - allowed_values: [m1.tiny, m1.small, m1.medium, m1.large]
+        description:
+          Value must be one of 'm1.tiny', 'm1.small', 'm1.medium' or 'm1.large'.
+  image_id:
+    type: string
+    description: ID of the image to use for the instance to be created.
+    default: myfirstimage
+resources:
+  web_server_group_launch_conf:
+     type: AWS::AutoScaling::LaunchConfiguration
+     properties:
+       ImageId: { get_param: image_id }
+       InstanceType: { get_param: instance_type }
+  server_group:
+    type: AWS::AutoScaling::AutoScalingGroup
+    properties:
+      AvailabilityZones: ["RegionOne"]
+      MinSize: '1'
+      MaxSize: '3'
+      LaunchConfigurationName: {get_resource: web_server_group_launch_conf}
+  web_server_scaleup_policy:
+    type: AWS::AutoScaling::ScalingPolicy
+    properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: {get_resource: server_group}
+      Cooldown: 60
+      ScalingAdjustment: 1
+  web_server_scaledown_policy:
+    type: AWS::AutoScaling::ScalingPolicy
+    properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: {get_resource: server_group}
+      Cooldown: 60
+      ScalingAdjustment: -1
+  cpu_alarm_high:
+    type: OS::Ceilometer::Alarm
+    properties:
+      description: Scale-up if the average CPU > 80% for 5 minute
+      meter_name: cpu_util
+      statistic: avg
+      period: '300'
+      evaluation_periods: '1'
+      threshold: '80'
+      alarm_actions:
+        - {get_attr: [web_server_scaleup_policy, AlarmUrl]}
+      comparison_operator: gt
+  cpu_alarm_low:
+    type: OS::Ceilometer::Alarm
+    properties:
+      description: Scale-down if the average CPU < 45% for 2 minutes
+      meter_name: cpu_util
+      statistic: avg
+      period: '120'
+      evaluation_periods: '1'
+      threshold: '45'
+      alarm_actions:
+        - {get_attr: [web_server_scaledown_policy, AlarmUrl]}
+      comparison_operator: lt

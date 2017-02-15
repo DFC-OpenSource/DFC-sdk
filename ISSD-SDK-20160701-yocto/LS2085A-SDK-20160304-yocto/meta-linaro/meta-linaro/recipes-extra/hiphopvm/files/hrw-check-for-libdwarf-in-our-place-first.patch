@@ -1,0 +1,32 @@
+From: Marcin Juszkiewicz <marcin.juszkiewicz@linaro.org>
+
+We have two files named dwarf.h:
+- /usr/include/dwarf.h from elfutils
+- /usr/include/libdwarf/dwarf.h from libdwarf
+
+HHVM checks for dwarf.h and assumes that libdwarf.h is in same directory which
+is wrong for OE and probably also in RedHat based systems (Debian handles it in
+other way).
+
+Upstream-Status: pending
+
+---
+ CMake/FindLibDwarf.cmake |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+--- git.orig/CMake/FindLibDwarf.cmake
++++ git/CMake/FindLibDwarf.cmake
+@@ -18,12 +18,12 @@ endif (LIBDWARF_LIBRARIES AND LIBDWARF_I
+ 
+ find_path (DWARF_INCLUDE_DIR
+     NAMES
+       dwarf.h
+     PATHS
+-      /usr/include
+       /usr/include/libdwarf
++      /usr/include
+       /usr/local/include
+       /opt/local/include
+       /sw/include
+       ENV CPATH) # PATH and INCLUDE will also work
+ 

@@ -1,0 +1,44 @@
+From 6ad7caf6410237f3b1bed6ff4d9f0423e69afcd6 Mon Sep 17 00:00:00 2001
+From: Bruce Ashfield <bruce.ashfield@windriver.com>
+Date: Mon, 10 Mar 2014 00:57:18 -0400
+Subject: [PATCH] distros: add windriver skeleton distro file
+
+Signed-off-by: Bruce Ashfield <bruce.ashfield@windriver.com>
+---
+ cloudinit/distros/windriver.py |   24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+ create mode 100644 cloudinit/distros/windriver.py
+
+diff --git a/cloudinit/distros/windriver.py b/cloudinit/distros/windriver.py
+new file mode 100644
+index 000000000000..8eec13fe2207
+--- /dev/null
++++ b/cloudinit/distros/windriver.py
+@@ -0,0 +1,24 @@
++# vi: ts=4 expandtab
++#
++#    Copyright (C) 2014 WindRiver
++#
++#    This program is free software: you can redistribute it and/or modify
++#    it under the terms of the GNU General Public License version 3, as
++#    published by the Free Software Foundation.
++#
++#    This program is distributed in the hope that it will be useful,
++#    but WITHOUT ANY WARRANTY; without even the implied warranty of
++#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++#    GNU General Public License for more details.
++#
++#    You should have received a copy of the GNU General Public License
++#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++
++from cloudinit.distros import debian
++from cloudinit import log as logging
++
++LOG = logging.getLogger(__name__)
++
++
++class Distro(debian.Distro):
++    pass
+-- 
+1.7.10.4
+

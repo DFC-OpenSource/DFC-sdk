@@ -1,0 +1,55 @@
+# enable in local.conf via:
+OPENSTACK_CONTROLLER_EXTRA_INSTALL += "tempest keystone-tests glance-tests cinder-tests \
+                                       horizon-tests heat-tests neutron-tests nova-tests ceilometer-tests"
+
+# For the tempest built-in tests:
+---------------------------------
+  # edit /etc/tempest/tempest.conf to suit details of the system
+  % cd /usr/lib/python2.7/site-packages
+  % nosetests --verbose tempest/api
+
+OR (less reliable)
+
+  % cd /usr/lib/python2.7/site-packages
+  % cp /etc/tempest/.testr.conf .
+  % testr init
+  % testr run --parallel tempest
+
+# For individual package tests
+------------------------------
+# typical:
+  % cd /usr/lib/python2.7/site-packages/<project>
+  % /etc/<project>/run_tests.sh --verbose -N
+
+# Cinder:
+# Notes: tries to run setup.py, --debug works around part of the issue
+  % cd /usr/lib/python2.7/site-packages/
+  % nosetests --verbose cinder/tests
+
+# Neutron:
+# Notes: use nosetests directly
+  % cd /usr/lib/python2.7/site-packages/
+  % nosetests --verbose neutron/tests
+
+# Nova:
+# Notes: vi /usr/lib/python2.7/site-packages/nova/tests/conf_fixture.py
+#        modify api-paste.ini reference to be /etc/nova/api-paste.ini, the conf
+#        file isn't being read properly, so some tests will fail to run
+   % cd /
+   % nosetests --verbose /usr/lib/python2.7/site-packages/nova/tests
+
+# keystone:
+#
+
+# Other Notes:
+--------------
+
+  1) testr: not so good, can be missing, some tools are. use nostests directly
+     instead.
+  2) all run_tests.sh are provided, even though they are similar
+
+
+
+
+
+

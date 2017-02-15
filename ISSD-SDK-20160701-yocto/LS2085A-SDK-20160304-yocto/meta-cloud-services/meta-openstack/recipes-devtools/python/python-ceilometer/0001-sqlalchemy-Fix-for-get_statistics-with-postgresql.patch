@@ -1,0 +1,33 @@
+From a784cd8f552e1f8ead86230f96e5b9ac8217efea Mon Sep 17 00:00:00 2001
+From: Bruce Ashfield <bruce.ashfield@windriver.com>
+Date: Wed, 29 Jan 2014 18:05:46 -0500
+Subject: [PATCH] sqlalchemy: Fix for get_statistics with postgresql
+
+Based on: https://review.openstack.org/#/c/59214/
+
+  Add group by counter_unit in statistics queryI
+  Fixes: bug #1256318
+
+Signed-off-by: Bruce Ashfield <bruce.ashfield@windriver.com>
+---
+ ceilometer/storage/impl_sqlalchemy.py |    4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/ceilometer/storage/impl_sqlalchemy.py b/ceilometer/storage/impl_sqlalchemy.py
+index 8a3deba3a4ea..92d3a5901f5a 100644
+--- a/ceilometer/storage/impl_sqlalchemy.py
++++ b/ceilometer/storage/impl_sqlalchemy.py
+@@ -574,7 +574,9 @@ class Connection(base.Connection):
+             group_attributes = [getattr(models.Meter, g) for g in groupby]
+             select.extend(group_attributes)
+ 
+-        query = session.query(*select)
++        #Group by counter_unit for postgresql queries
++        #In mysql this doesn't change anything because one meter has one unit
++        query = session.query(*select).group_by(models.Meter.counter_unit)
+ 
+         if groupby:
+             query = query.group_by(*group_attributes)
+-- 
+1.7.10.4
+

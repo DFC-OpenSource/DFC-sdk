@@ -1,0 +1,34 @@
+From 205ee3cfa4c7efd39f5fe991b53327c1bd771f97 Mon Sep 17 00:00:00 2001
+From: Keith Holman <Keith.Holman@windriver.com>
+Date: Tue, 3 Jun 2014 16:19:54 -0400
+Subject: [PATCH] keystone: fix location of files for tests
+
+Keystone tests define the location of certificate files
+as the location of the files in the source tree. However,
+when installed on the system these files are put in a
+different location.  This patch provides a symbol, which
+is replaced, for the base path of the location of the test
+files.
+
+Signed-off-by: Keith Holman <Keith.Holman@windriver.com>
+---
+ keystone/tests/test_overrides.conf | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/keystone/tests/test_overrides.conf b/keystone/tests/test_overrides.conf
+index 801b0d2..ba35343 100644
+--- a/keystone/tests/test_overrides.conf
++++ b/keystone/tests/test_overrides.conf
+@@ -21,6 +21,6 @@ debug_cache_backend = True
+ proxies = keystone.tests.test_cache.CacheIsolatingProxy
+ 
+ [signing]
+-certfile = ../../examples/pki/certs/signing_cert.pem
+-keyfile = ../../examples/pki/private/signing_key.pem
+-ca_certs = ../../examples/pki/certs/cacert.pem
++certfile = %KEYSTONE_PACKAGE_DIR%/examples/pki/certs/signing_cert.pem
++keyfile = %KEYSTONE_PACKAGE_DIR%/examples/pki/private/signing_key.pem
++ca_certs = %KEYSTONE_PACKAGE_DIR%/examples/pki/certs/cacert.pem
+-- 
+1.9.3
+
