@@ -1,1 +1,0 @@
-SWIG_FEATURES_aarch64 = "-D__LP64__"
