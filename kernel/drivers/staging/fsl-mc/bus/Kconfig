@@ -1,0 +1,45 @@
+#
+# Freescale Management Complex (MC) bus drivers
+#
+# Copyright (C) 2014 Freescale Semiconductor, Inc.
+#
+# This file is released under the GPLv2
+#
+
+config FSL_MC_BUS
+	tristate "Freescale Management Complex (MC) bus driver"
+	depends on OF && ARM64
+	help
+	  Driver to enable the bus infrastructure for the Freescale
+          QorIQ Management Complex (fsl-mc). The fsl-mc is a hardware
+	  module of the QorIQ LS2 SoCs, that does resource management
+	  for hardware building-blocks in the SoC that can be used
+	  to dynamically create networking hardware objects such as
+	  network interfaces (NICs), crypto accelerator instances,
+	  or L2 switches.
+
+	  Only enable this option when building the kernel for
+	  Freescale QorQIQ LS2xxxx SoCs.
+
+config FSL_MC_RESTOOL
+        tristate "Freescale Management Complex (MC) restool driver"
+        depends on FSL_MC_BUS
+        help
+          Driver that provides kernel support for the Freescale Management
+	  Complex resource manager user-space tool.
+
+config FSL_MC_DPIO
+	tristate "Freescale Data Path I/O (DPIO) driver"
+	depends on FSL_MC_BUS
+	help
+	  Driver for Freescale Data Path I/O (DPIO) devices.
+	  A DPIO device provides queue and buffer management facilities
+	  for software to interact with other Data Path devices. This
+	  driver does not expose the DPIO device individually, but
+	  groups them under a service layer API.
+
+config FSL_QBMAN_DEBUG
+	tristate "Freescale QBMAN Debug APIs"
+	depends on FSL_MC_DPIO
+	help
+	  QBMan debug assistant APIs.

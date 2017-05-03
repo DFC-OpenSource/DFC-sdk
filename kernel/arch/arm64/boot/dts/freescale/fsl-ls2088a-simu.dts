@@ -1,0 +1,50 @@
+/*
+ * Device Tree file for Freescale LS2088a software Simulator model
+ *
+ * Copyright (C) 2015-2016, Freescale Semiconductor
+ *
+ * Abhimanyu Saini <abhimanyu.saini@nxp.com>
+ *
+ * This file is licensed under the terms of the GNU General Public
+ * License version 2.  This program is licensed "as is" without any
+ * warranty of any kind, whether express or implied.
+ */
+
+/dts-v1/;
+
+#include "fsl-ls2088a.dtsi"
+
+/ {
+	model = "Freescale Layerscape 2088A software Simulator model";
+	compatible = "fsl,ls2088a-simu", "fsl,ls2088a";
+
+	ethernet@2210000 {
+		compatible = "smsc,lan91c111";
+		reg = <0x0 0x2210000 0x0 0x100>;
+		interrupts = <0 58 0x1>;
+	};
+};
+
+&ifc {
+	status = "okay";
+};
+
+&i2c0 {
+	status = "okay";
+};
+
+&dspi {
+	status = "okay";
+};
+
+&usb0 {
+	status = "okay";
+};
+
+&usb1 {
+	status = "okay";
+};
+
+&fsl_mc {
+	status = "okay";
+};

@@ -1,0 +1,243 @@
+/*
+ * Device Tree file for Freescale LS2080a QDS Board
+ *
+ * Copyright (C) 2016, Freescale Semiconductor
+ *
+ * Abhimanyu Saini <abhimanyu.saini@nxp.com>
+ *
+ * This file is licensed under the terms of the GNU General Public
+ * License version 2.  This program is licensed "as is" without any
+ * warranty of any kind, whether express or implied.
+ */
+
+/dts-v1/;
+
+#include "fsl-ls2088a.dtsi"
+
+/ {
+	model = "Freescale Layerscape 2088a QDS Board";
+	compatible = "fsl,ls2088a-qds", "fsl,ls2088a";
+};
+
+&esdhc {
+	mmc-hs200-1_8v;
+	status = "okay";
+};
+
+&ifc {
+	status = "okay";
+	#address-cells = <2>;
+	#size-cells = <1>;
+	ranges = <0x0 0x0 0x5 0x80000000 0x08000000
+		  0x2 0x0 0x5 0x30000000 0x00010000
+		  0x3 0x0 0x5 0x20000000 0x00010000>;
+
+	nor@0,0 {
+	     #address-cells = <1>;
+	     #size-cells = <1>;
+	     compatible = "cfi-flash";
+	     reg = <0x0 0x0 0x8000000>;
+	     bank-width = <2>;
+	     device-width = <1>;
+              partition@0 {
+                       label = "PBL";
+                       reg = <0x00000 0x20000>;
+               };
+
+               partition@20000 {
+                       label = "U-BOOT";
+                       reg = <0x20000 0xA0000>;
+               };
+
+               partition@C0000 {
+                       label = "U-BOOT_ENV";
+                       reg = <0xC0000 0x20000>;
+               };
+
+               partition@E0000 {
+                       label = "DPL";
+                       reg = <0xE0000 0x20000>;
+               };
+
+               partition@100000 {
+                       label = "DPC";
+                       reg = <0x100000 0x20000>;
+               };
+
+               partition@120000 {
+                       label = "MC";
+                       reg = <0x120000 0x280000>;
+               };
+
+               partition@3A0000 {
+                       label = "DTB";
+                       reg = <0x3A0000 0x20000>;
+               };
+
+               partition@3C0000 {
+                       label = "UIMAGE_INIC";
+			           reg = <0x3C0000 0x880000>;
+               };
+
+               partition@C40000 {
+                       label = "UIMAGE_ISSD";
+			           reg = <0xC40000 0x880000>;
+               };
+
+               partition@14C0000 {
+                       label = "ROOTFS";
+			           reg = <0x14C0000 0x2140000>;
+               };
+
+               partition@3600000 {
+                       label = "JFFS2";
+			           reg = <0x3600000 0xA00000>;
+               };
+
+	           partition@4000000 {
+                       label = "PBL_1";
+                       reg = <0x4000000 0x20000>;
+               };
+
+               partition@4020000 {
+                       label = "U-BOOT_1";
+                       reg = <0x4020000 0xA0000>;
+               };
+
+               partition@40C0000 {
+                       label = "U-BOOT_ENV_1";
+                       reg = <0x40C0000 0x20000>;
+               };
+
+               partition@40E0000 {
+                       label = "DPL_1";
+                       reg = <0x40E0000 0x20000>;
+               };
+
+               partition@4100000 {
+                       label = "DPC_1";
+                       reg = <0x4100000 0x20000>;
+               };
+
+               partition@4120000 {
+                       label = "MC_1";
+                       reg = <0x4120000 0x280000>;
+               };
+
+               partition@43A0000 {
+                       label = "DTB_1";
+                       reg = <0x43A0000 0x20000>;
+               };
+
+               partition@43C0000 {
+                       label = "UIMAGE_INIC_1";
+			           reg = <0x43C0000 0x880000>;
+               };
+
+               partition@4C40000 {
+                       label = "UIMAGE_ISSD_1";
+			           reg = <0x4C40000 0x880000>;
+               };
+
+               partition@54C0000 {
+                       label = "ROOTFS_1";
+			           reg = <0x54C0000 0x2140000>;
+               };
+
+               partition@7600000 {
+                       label = "JFFS2_1";
+			           reg = <0x7600000 0xA00000>;
+               };
+
+	};
+
+	nand@2,0 {
+	     compatible = "fsl,ifc-nand";
+	     reg = <0x2 0x0 0x10000>;
+	};
+
+
+};
+
+&ftm0 {
+	status = "okay";
+};
+
+&i2c0 {
+	status = "okay";
+	pca9547@77 {
+		compatible = "nxp,pca9547";
+		reg = <0x77>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		i2c@0 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x00>;
+		};
+
+		i2c@3 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x3>;
+
+			tmp451@4c {
+				compatible = "tmp,tmp451";
+				reg = <0x4c>;
+			};
+		};
+	};
+};
+
+&i2c3 {
+	status = "okay";
+};
+
+&dspi {
+	status = "okay";
+	dflash0: n25q128a {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "st,m25p80";
+		spi-max-frequency = <3000000>;
+		reg = <0>;
+	};
+};
+
+&qspi {
+	status = "okay";
+	qflash0: s25fs256s1@0 {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "st,m25p80";
+		spi-max-frequency = <20000000>;
+		m25p,fast-read;
+		reg = <0>;
+	};
+
+	qflash2: s25fs256s1@2 {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "st,m25p80";
+		spi-max-frequency = <20000000>;
+		m25p,fast-read;
+		reg = <2>;
+	};
+};
+
+&sata0 {
+	status = "okay";
+};
+
+&sata1 {
+	status = "okay";
+};
+
+&usb0 {
+	status = "okay";
+};
+
+&usb1 {
+	status = "okay";
+};
+
