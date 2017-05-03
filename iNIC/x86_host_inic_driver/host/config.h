@@ -1,0 +1,16 @@
+#ifndef DFC_INIC_H
+#define DFC_INIC_H
+
+#define FSLU_NVME_INIC_DPAA2 1
+#define FSLU_NVME_INIC_QDMA 0
+
+#if FSLU_NVME_INIC_DPAA2
+#define FSLU_NVME_INIC_QDMA_IRQ 0
+#define FSLU_NVME_INIC_FPGA_IRQ 0
+#define FSLU_NVME_INIC_SG 0
+#endif
+
+#define FSLU_NVME_INIC_POLL 1
+
+#endif
+
