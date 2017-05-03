@@ -1,3 +1,0 @@
-if ARM || ARM64
-source "drivers/soc/fsl/Kconfig.arm"
-endif
