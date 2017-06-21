@@ -19,31 +19,3 @@ index c52a24b..683dff2 100644
 +	dev->bar = ioremap(pci_resource_start(pdev, 0), 8192);
  	if (!dev->bar)
  		goto disable;
- 
-diff --git a/m.2/m.2_nvme.patch b/m.2/m.2_nvme.patch
-index f36a80e..e69de29 100644
---- a/m.2/m.2_nvme.patch
-+++ b/m.2/m.2_nvme.patch
-@@ -1,22 +0,0 @@
--diff --git a/kernel/drivers/block/nvme-core.c b/kernel/drivers/block/nvme-core.c
--index c52a24b..683dff2 100644
----- a/kernel/drivers/block/nvme-core.c
--+++ b/kernel/drivers/block/nvme-core.c
--@@ -2217,7 +2217,7 @@ static int nvme_setup_io_queues(struct nvme_dev *dev)
-- 	if (size > 8192) {
-- 		iounmap(dev->bar);
-- 		do {
---			dev->bar = ioremap(pci_resource_start(pdev, 2), size);
--+			dev->bar = ioremap(pci_resource_start(pdev, 0), size);
-- 			if (dev->bar)
-- 				break;
-- 			if (!--nr_io_queues)
--@@ -2367,7 +2367,7 @@ static int nvme_dev_map(struct nvme_dev *dev)
-- 	    dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32)))
-- 		goto disable;
-- 
---	dev->bar = ioremap(pci_resource_start(pdev, 2), 8192);
--+	dev->bar = ioremap(pci_resource_start(pdev, 0), 8192);
-- 	if (!dev->bar)
-- 		goto disable;
-- 
