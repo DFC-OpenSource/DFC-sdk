@@ -13,6 +13,9 @@
 #include "pcie.h"
 #include "bdbm_ftl/host_block.h"
 #include "i2c_dimm.h"
+#include "ls2_cache.h"
+#include "unaligned_cache.h"
+#include "qdma.h"
 
 #define NVME_MAX_QS             2047 //PCI_MSIX_FLAGS_QSIZE -TODO
 #define NVME_MAX_QUEUE_ENTRIES  0xffff
@@ -26,12 +29,8 @@
 #define NVME_OP_ABORTED         0xff
 
 #define PCI_VENDOR_ID_INTEL     0x8086
-#define SPINLOCK
-#if (CUR_SETUP != STANDALONE_SETUP)
-#define ADMIN_MSI
-#endif
+/*#define ADMIN_MSI*/
 
-#define COMT3
 enum nvme_rw_reqs {
 	NVME_REQ_WRITE = 0,
 	NVME_REQ_READ = 1,
@@ -535,11 +534,7 @@ typedef struct NvmeRequest {
 	NvmeCqe                 cqe;
 	uint8_t					lba_index;
 	// 	BlockAcctCookie         acct;
-#ifdef STATIC_BIO
 	nvme_bio                bio;
-#else
-	nvme_bio                *bio;
-#endif
 	struct NvmeRequest      *next;
 	struct NvmeRequest      *prev;
 } NvmeRequest;
@@ -648,7 +643,12 @@ typedef struct BlockAcctStats {
 
 #define NVME_MQ_MSGSIZE  8 /*Messages are integers indicating SQIDs*/
 #define NVME_MQ_MAXMSG   NVME_NUM_QUEUES
-#define NVME_MQ_NAME     "/nvme_mq"
+#define NVME_LS2_DDR_MQ_NAME     "/nvme_ls2_ddr_mq"
+#define NVME_FPGA_DDR_MQ_NAME     "/nvme_fpga_ddr_mq"
+#define NVME_NAND_MQ_NAME     "/nvme_nand_mq"
+#define NVME_UNALIGN_MQ_NAME     "/nvme_unalign_mq"
+#define NVME_TRIM_MQ_NAME     "/nvme_trim_mq"
+#define NVME_QDMA_MQ_NAME     "/nvme_qdma_mq"
 
 #define SHADOW_REG_SZ 64
 #define NVME_MAX_PRIORITY 4
@@ -671,20 +671,20 @@ typedef struct NvmeQSched {
 } NvmeQSched;
 
 typedef struct NvmeCtrl {
-	uint8_t      running;
-	int          fd_uio[2];
-	FpgaCtrl     fpga;
-	DmaCtrl      dma;
-	HostCtrl     host;
-	FpgaIrqs     in_irqs;
-	NvmeBioTarget target;
-	MemoryRegion iomem;
-	MemoryRegion ctrl_mem;
-	NvmeRegs     nvme_regs;
-	NvmeQSched   qsched;
-	// 	BlockConf    conf;
-	time_t      start_time;
-	uint16_t    temperature;
+	uint8_t		running;
+	int		fd_uio[2];
+	FpgaCtrl	fpga;
+	DmaCtrl		dma;
+	HostCtrl	host;
+	FpgaIrqs	in_irqs;
+	NvmeBioTarget	target;
+	MemoryRegion	iomem;
+	MemoryRegion	ctrl_mem;
+	NvmeRegs    	nvme_regs;
+	NvmeQSched  	qsched;
+	// 	BlockConf	conf;
+	time_t		start_time;
+	uint16_t	temperature;
 	uint16_t    page_size;
 	uint16_t    page_bits;
 	uint16_t    max_prp_ents;
@@ -730,8 +730,14 @@ typedef struct NvmeCtrl {
 	uint8_t     *cmbuf;
 	nvme_drv_params *drv_params;
 	struct timespec time;
-	int         mq_txid;
-	int         mq_rxid;
+	int         ls2_ddr_mq_txid;
+	int         ls2_ddr_mq_rxid;
+	int         fpga_ddr_mq_txid;
+	int         fpga_ddr_mq_rxid;
+	int         nand_mq_txid;
+	int         nand_mq_rxid;
+	int         unalign_mq_txid;
+	int         trim_mq_txid;
 
 	char            *serial;
 	NvmeErrorLog    *elpes;
@@ -745,19 +751,26 @@ typedef struct NvmeCtrl {
 	NvmeIdCtrl      id_ctrl;
 	NvmeAsyncEvent  *aer_queue;
 	NvmeTimer       *aer_timer;
-	uint8_t         aer_mask;
-	pthread_mutex_t req_mutex;
-#ifdef SPINLOCK
-    pthread_spinlock_t qs_req_spin;
-    pthread_spinlock_t aer_req_spin;
-#else
-	pthread_mutex_t qsch_mutex;
-#endif
-	BlockAcctStats stat;
-    uint64_t namespace_size[3];
-	uint64_t ns_check;
-    int dimm_module_type;
-    dimm_details **dm;
+	uint8_t		aer_mask;
+	pthread_mutex_t	req_mutex;
+	pthread_t	io_completer_tid_ddr;
+	pthread_t	io_completer_tid_nand;
+	pthread_t	io_processor_tid;
+	pthread_t	unalign_bio_tid;
+	pthread_t	qdma_completer_tid;
+	pthread_t	qdma_handler_tid;
+	pthread_spinlock_t qs_req_spin;
+	pthread_spinlock_t aer_req_spin;
+	BlockAcctStats	stat;
+	uint64_t	namespace_size[3];
+	uint64_t	ns_check;
+	uint8_t 	pex_count;
+	uint8_t 	nbe_flag;
+	int			dimm_module_type;
+	dimm_details	**dm;
+	LS2_Cache	ls2_cache;
+	nvme_cache	cache;
+	QdmaCtrl	qdmactrl;
 } NvmeCtrl;
 
 typedef struct NvmeDifTuple {
@@ -771,6 +784,10 @@ typedef struct NvmeDifTuple {
 		const typeof(((type *) 0)->member) *__mptr = (ptr);     \
 		(type *) ((char *) __mptr - offsetof(type, member));})
 #endif
+
+#define THREAD_CANCEL(id) { \
+	pthread_cancel (id); \
+	pthread_join (id, NULL); }
 
 typedef struct fifo_data {
 	uint64_t new_val;
@@ -860,6 +877,7 @@ extern int get_dimm_info(NvmeCtrl *n);
 int nvme_bio_init (NvmeCtrl *n);
 inline void nvme_bio_deinit (NvmeCtrl *n);
 void nvme_rw_cb (void *opaque, int ret);
+void *io_processor (void *arg);
 
 #endif	/*__NVME_CTRL_H*/
 

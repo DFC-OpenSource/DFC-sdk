@@ -1,25 +1,24 @@
 Readme :
 --------
-    => This application is carrying out the NVMe DDR and NAND I/O operation. 
+    => This application is carrying out the NVMe NAND I/O operation. 
 
 Features Supported:
 -------------------
 
 1. Added NAND 16K page support.
+2. Added QDMA support
 
 Mistakes Corrected:
 -------------------
 
-=> Fixed DDR hang issue while doing mkfs
 => Fixed NAND timeout issue
+=> Fixed Read-Trim Command issue
 
 Performance:
 ------------
 
-Read DDR speed          => 450 MBps
-Write DDR speed         => 500 MBps
-Read NAND speed         => 27 MBps
-Write NAND speed        => 30 MBps
+Read NAND speed         => 82 MBps
+Write NAND speed        => 76 MBps
 
 
-FPGA image version  => 02.04.00
+FPGA image version  => 03.01.00

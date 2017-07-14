@@ -25,6 +25,7 @@ THE SOFTWARE.
 #ifndef _BLUEDBM_DEBUG_H
 #define _BLUEDBM_DEBUG_H
 
+#include <unistd.h>
 #include "platform.h"
 #define CONFIG_ENABLE_MSG
 #define CONFIG_ENABLE_DEBUG

@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include <linux/module.h>
 #include <linux/blkdev.h>
 */
+#include <pthread.h>
 #include "debug.h"
 #include "params.h"
 #include "bdbm_drv.h"
@@ -90,6 +91,9 @@ uint32_t __hlm_nobuf_make_trim_req (struct bdbm_drv_info* bdi, struct bdbm_hlm_r
 {
 	struct bdbm_ftl_inf_t* ftl = (struct bdbm_ftl_inf_t*)BDBM_GET_FTL_INF(bdi);
 	uint64_t i;
+	unsigned long nr_secs_per_kp = 0;
+	
+	nr_secs_per_kp = KERNEL_PAGE_SIZE >> KERNEL_SECTOR_SZ_SHIFT;
 	
 	if (!ptr_hlm_req->is_seq_lpa) {
 		for (i = 0; i < ptr_hlm_req->len; i++) {
@@ -97,7 +101,7 @@ uint32_t __hlm_nobuf_make_trim_req (struct bdbm_drv_info* bdi, struct bdbm_hlm_r
 		}
 	} else {
 		uint64_t lpa = ptr_hlm_req->lpa[0];
-		lpa = lpa/8;/*TODO to remove once after the code without cache is verfied*/
+		lpa = lpa/nr_secs_per_kp;/*TODO to remove once after the code without cache is verfied*/
 		for (i = 0; i < ptr_hlm_req->len; i++,lpa++) {
 			ftl->invalidate_lpa (bdi, lpa, 1);
 		}
@@ -111,7 +115,7 @@ uint32_t __hlm_nobuf_get_req_type (struct bdbm_drv_info* bdi, struct bdbm_hlm_re
 	struct nand_params* np = (struct nand_params*)BDBM_GET_NAND_PARAMS(bdi);
 	uint32_t nr_kp_per_fp, req_type, j;
 
-	nr_kp_per_fp = np->page_main_size / KERNEL_PAGE_SIZE;	/* e.g., 2 = 8 KB / 4 KB */
+	nr_kp_per_fp = np->page_main_size >> KERNEL_PAGE_SHIFT;	/* e.g., 2 = 8 KB / 4 KB */
 
 	/* temp */
 	if (dp->mapping_policy == MAPPING_POLICY_SEGMENT)
@@ -139,13 +143,13 @@ uint32_t __hlm_nobuf_make_wr_req (struct bdbm_drv_info* bdi, struct bdbm_hlm_req
 	uint32_t nr_kp_per_fp;
 	uint32_t hlm_len, llm_cnt = 0;
 	uint32_t ret = 0;
-	uint32_t i,sub_page;
-	uint64_t *lpa;
+	uint32_t i,sub_page, offset;
+	/*uint64_t *lpa;*/
 
-	nr_kp_per_fp = np->page_main_size / KERNEL_PAGE_SIZE;	/* e.g., 2 = 8 KB / 4 KB */
+	nr_kp_per_fp = np->page_main_size >> KERNEL_PAGE_SHIFT;	/* e.g., 2 = 8 KB / 4 KB */
 	hlm_len = ptr_hlm_req->len;
 	llm_cnt = hlm_len / nr_kp_per_fp;
-	lpa = ptr_hlm_req->lpa;
+	/*lpa = ptr_hlm_req->lpa;*/
 	/* create a set of llm_req */
 	if ((pptr_llm_req = (struct bdbm_llm_req_t**)bdbm_malloc_atomic
 			(sizeof (struct bdbm_llm_req_t*) * llm_cnt)) == NULL) {
@@ -157,6 +161,7 @@ uint32_t __hlm_nobuf_make_wr_req (struct bdbm_drv_info* bdi, struct bdbm_hlm_req
 	/* divide a hlm_req into multiple llm_reqs */
 	for (i = 0; i < llm_cnt; i++) {
 		struct bdbm_llm_req_t* r = NULL;
+		offset = i * nr_kp_per_fp;
 
 		/* create a low-level request */
 		if ((r = (struct bdbm_llm_req_t*)bdbm_malloc_atomic 
@@ -168,9 +173,9 @@ uint32_t __hlm_nobuf_make_wr_req (struct bdbm_drv_info* bdi, struct bdbm_hlm_req
 	
 		/* setup llm_req */
 		r->req_type = REQTYPE_WRITE;
-		r->lpa = ptr_hlm_req->lpa + (i * nr_kp_per_fp);  /* each request should be lpa size */
-		r->kpg_flags = ptr_hlm_req->kpg_flags + (i * nr_kp_per_fp);
-		r->pptr_kpgs = ptr_hlm_req->pptr_kpgs + (i * nr_kp_per_fp);
+		r->lpa = ptr_hlm_req->lpa + offset;  /* each request should be lpa size */
+		r->kpg_flags = ptr_hlm_req->kpg_flags + offset;
+		r->pptr_kpgs = ptr_hlm_req->pptr_kpgs + offset;
 		r->ptr_hlm_req = (void*)ptr_hlm_req;
 
 		r->phyaddr = &r->phyaddr_w;
@@ -194,23 +199,26 @@ uint32_t __hlm_nobuf_make_wr_req (struct bdbm_drv_info* bdi, struct bdbm_hlm_req
 		} else {
 			r->ptr_oob = NULL;
 		}
-
+		r->offset = NULL;
 		/* keep some metadata in OOB if it is write (e.g., LPA) */
 		if (r->ptr_oob) {
-			for (sub_page = 0; sub_page < np->nr_subpages_per_page; sub_page++) { 
-				((uint64_t*)r->ptr_oob)[sub_page] = r->lpa[sub_page];
+			for (sub_page = 0; sub_page < np->nr_subpages_per_page; sub_page++) {
+				if (sub_page >= 4) { 
+					((uint64_t*)(r->ptr_oob + (np->page_oob_size >> 1)))[sub_page & 3] = r->lpa[sub_page];
+				} else {
+					((uint64_t*)r->ptr_oob)[sub_page] = r->lpa[sub_page];
+				}
 			}
 		}
 	}
 
-	if ((ret = bdi->ptr_llm_inf->make_req (bdi, pptr_llm_req)) != 0) {
+	if ((ret = bdi->ptr_dm_inf->make_req (bdi, pptr_llm_req)) != 0) {
 		bdbm_error ("llm_make_req failed");
 	}
 
 	/* free pptr_llm_req */
 	//bdbm_free_atomic (pptr_llm_req);
 
-	//printf ("hlm_nobuf req success\n");
 	return 0;
 
 fail:
@@ -234,12 +242,15 @@ uint32_t __hlm_nobuf_make_rd_req (struct bdbm_drv_info* bdi, struct bdbm_hlm_req
 	struct bdbm_ftl_inf_t* ftl = (struct bdbm_ftl_inf_t*)BDBM_GET_FTL_INF(bdi);
 	struct nand_params* np = (struct nand_params*)BDBM_GET_NAND_PARAMS(bdi);
 	struct bdbm_llm_req_t** pptr_llm_req;
+	struct bdbm_phyaddr_t curr_phy, prev_phy; 
 	uint32_t nr_kp_per_fp;
 	uint32_t hlm_len;
 	uint32_t ret = 0;
 	uint32_t i;
+	uint32_t req_type; 
+	uint8_t offset = 0, prev_off = 0, chk_PrevPhy = 0, j=0, k=0;
 
-	nr_kp_per_fp = np->page_main_size / KERNEL_PAGE_SIZE;	/* e.g., 2 = 8 KB / 4 KB */
+	nr_kp_per_fp = np->page_main_size >> KERNEL_PAGE_SHIFT;	/* e.g., 2 = 8 KB / 4 KB */
 	hlm_len = ptr_hlm_req->len;
 
 	/* create a set of llm_req */
@@ -252,38 +263,64 @@ uint32_t __hlm_nobuf_make_rd_req (struct bdbm_drv_info* bdi, struct bdbm_hlm_req
 	ptr_hlm_req->nr_llm_reqs = hlm_len;
 	/* divide a hlm_req into multiple llm_reqs */
 	for (i = 0; i < hlm_len; i++) {
-		struct bdbm_llm_req_t* r = NULL;
+		struct bdbm_llm_req_t* r;
 
+		if (ftl->get_ppa (bdi, ptr_hlm_req->lpa[i], &curr_phy, &offset) != 0) {
+			req_type = REQTYPE_READ_DUMMY; /* reads for unwritten pages */
+			chk_PrevPhy = 0;
+		} else if (chk_PrevPhy) {
+			if ((curr_phy.channel_no == prev_phy.channel_no) \
+					&& (curr_phy.chip_no == prev_phy.chip_no) \
+					&& (curr_phy.block_no == prev_phy.block_no) \
+					&& (curr_phy.page_no == prev_phy.page_no) \
+					&& (offset == prev_off + 1)) {
+				ptr_hlm_req->nr_llm_reqs--;
+				j++;
+				r->offset[j] = offset;
+				prev_off = offset;
+				r->nr_subpgs++;
+				continue;
+			}
+		} else {
+			chk_PrevPhy = 1;
+			req_type = REQTYPE_READ;
+		}
+		j=0;
+		prev_phy = curr_phy;
+		prev_off = offset;
 		/* create a low-level request */
+		r = NULL;
 		if ((r = (struct bdbm_llm_req_t*)bdbm_malloc_atomic 
 				(sizeof (struct bdbm_llm_req_t))) == NULL) {
 			bdbm_error ("bdbm_malloc_atomic failed");
 			goto fail;
 		}
-		pptr_llm_req[i] = r;
+		pptr_llm_req[k] = r;
 	
 		/* setup llm_req */
-		r->req_type = REQTYPE_READ;
+		r->req_type = req_type;
 		r->lpa = ptr_hlm_req->lpa + i;  /* each request should be lpa size */
 
 		/* get the physical addr for reads */
 		r->phyaddr = &r->phyaddr_r;
-		if (ftl->get_ppa (bdi, r->lpa[0], r->phyaddr, &r->offset) != 0)
-			r->req_type = REQTYPE_READ_DUMMY; /* reads for unwritten pages */
+		r->phyaddr_r = curr_phy;
+		r->offset = bdbm_malloc (nr_kp_per_fp * sizeof(uint8_t));
+		bdbm_memset (r->offset, -1U, nr_kp_per_fp * sizeof(uint8_t));
+		r->offset[j] = offset;
+		r->nr_subpgs = 1;
 
 		r->kpg_flags = ptr_hlm_req->kpg_flags + i;
 		r->pptr_kpgs = ptr_hlm_req->pptr_kpgs + i;
 		r->ptr_hlm_req = (void*)ptr_hlm_req;
-
+		k++;
 	}
-	if ((ret = bdi->ptr_llm_inf->make_req (bdi, pptr_llm_req)) != 0) {
+	if ((ret = bdi->ptr_dm_inf->make_req (bdi, pptr_llm_req)) != 0) {
 		bdbm_error ("llm_make_req failed");
 	}
 
 	/* free pptr_llm_req */
 	//bdbm_free_atomic (pptr_llm_req);
 
-	//printf ("hlm_nobuf req success\n");
 	return 0;
 
 fail:
@@ -313,7 +350,7 @@ uint32_t __hlm_nobuf_make_rw_req (struct bdbm_drv_info* bdi, struct bdbm_hlm_req
 	uint32_t ret = 0;
 	uint32_t i;
 
-	nr_kp_per_fp = np->page_main_size / KERNEL_PAGE_SIZE;	/* e.g., 2 = 8 KB / 4 KB */
+	nr_kp_per_fp = np->page_main_size >> KERNEL_PAGE_SHIFT;	/* e.g., 2 = 8 KB / 4 KB */
 	hlm_len = ptr_hlm_req->len;
 
 	/* create a set of llm_req */
@@ -410,7 +447,6 @@ uint32_t __hlm_nobuf_make_rw_req (struct bdbm_drv_info* bdi, struct bdbm_hlm_req
 	/* free pptr_llm_req */
 	//bdbm_free_atomic (pptr_llm_req);
 
-	//printf ("hlm_nobuf req success\n");
 	return 0;
 
 fail:
@@ -452,7 +488,6 @@ uint32_t hlm_nobuf_make_req (struct bdbm_drv_info* bdi, struct bdbm_hlm_req_t* p
 #endif
 	/* TODO: release */
 
-	//printf ("ptr_hlm_req->req_type: %x\n", ptr_hlm_req->req_type);
 	switch (ptr_hlm_req->req_type) {
 	case REQTYPE_TRIM:
 		if ((ret = __hlm_nobuf_make_trim_req (bdi, ptr_hlm_req)) == 0) {
@@ -505,7 +540,7 @@ void __hlm_nobuf_end_host_req (struct bdbm_drv_info* bdi, struct bdbm_llm_req_t*
 		uint32_t nr_sub_reqs, ofs, loop;
 
 		np = &bdi->ptr_bdbm_params->nand;
-		nr_sub_reqs = (ptr_llm_req->req_type == REQTYPE_WRITE) ? np->nr_subpages_per_page : 1;
+		nr_sub_reqs = (ptr_llm_req->req_type == REQTYPE_WRITE) ? np->nr_subpages_per_page : ptr_llm_req->nr_subpgs;
 
 		for (loop = 0; loop < nr_sub_reqs; loop++) {
 			/* change the status of kernel pages */
@@ -535,6 +570,9 @@ void __hlm_nobuf_end_host_req (struct bdbm_drv_info* bdi, struct bdbm_llm_req_t*
 		}
 		*/
 		bdbm_free_atomic (ptr_llm_req->ptr_oob);
+	}
+	if (ptr_llm_req->offset != NULL) {
+		bdbm_free (ptr_llm_req->offset);
 	}
 	bdbm_free_atomic (ptr_llm_req);
 

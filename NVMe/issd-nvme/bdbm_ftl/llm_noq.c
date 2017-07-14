@@ -46,7 +46,7 @@ struct bdbm_llm_inf_t _llm_noq_inf = {
 uint32_t llm_noq_create (struct bdbm_drv_info* bdi)
 {
 	struct bdbm_llm_noq_private* p;
-	uint64_t loop;
+	/*uint64_t loop;*/
 
 	/* create a private info for llm_nt */
 	if ((p = (struct bdbm_llm_noq_private*)bdbm_malloc_atomic
@@ -86,7 +86,7 @@ uint32_t llm_noq_create (struct bdbm_drv_info* bdi)
 void llm_noq_destroy (struct bdbm_drv_info* bdi)
 {
 	struct bdbm_llm_noq_private* p;
-	uint64_t loop;
+	/*uint64_t loop;*/
 
 	p = (struct bdbm_llm_noq_private*)BDBM_LLM_PRIV(bdi);
 #if 0
@@ -103,12 +103,12 @@ void llm_noq_destroy (struct bdbm_drv_info* bdi)
 uint32_t llm_noq_make_req (struct bdbm_drv_info* bdi, struct bdbm_llm_req_t** llm_req)
 {
 	uint32_t ret;
+#if 0
 	uint64_t punit_id;
 	struct bdbm_llm_noq_private* p;
 
 	p = (struct bdbm_llm_noq_private*)BDBM_LLM_PRIV(bdi);
 
-#if 0
 	/* get a parallel unit ID */
 	punit_id = llm_req->phyaddr->channel_no * 
 		BDBM_GET_NAND_PARAMS (bdi)->nr_chips_per_channel +
@@ -117,7 +117,6 @@ uint32_t llm_noq_make_req (struct bdbm_drv_info* bdi, struct bdbm_llm_req_t** ll
 	bdbm_wait_for_completion (p->punit_locks[punit_id]);
 	bdbm_reinit_completion (p->punit_locks[punit_id]);
 #endif
-//	printf("chan: %ld chip: %ld blok: %ld page: %ld\n" ,llm_req->phyaddr->channel_no,llm_req->phyaddr->chip_no,llm_req->phyaddr->block_no,llm_req->phyaddr->page_no);
 	/* send a request to a device manager */
 	ret = bdi->ptr_dm_inf->make_req (bdi, llm_req);
 
@@ -133,9 +132,9 @@ uint32_t llm_noq_make_req (struct bdbm_drv_info* bdi, struct bdbm_llm_req_t** ll
 
 void llm_noq_flush (struct bdbm_drv_info* bdi)
 {
+#if 0
 	struct bdbm_llm_noq_private* p = (struct bdbm_llm_noq_private*)BDBM_LLM_PRIV(bdi);
 	uint64_t loop;
-#if 0
 	for (loop = 0; loop < p->nr_punits; loop++) {
 		bdbm_wait_for_completion (p->punit_locks[loop]);
 		bdbm_complete (p->punit_locks[loop]);
@@ -145,6 +144,7 @@ void llm_noq_flush (struct bdbm_drv_info* bdi)
 
 void llm_noq_end_req (struct bdbm_drv_info* bdi, struct bdbm_llm_req_t* llm_req)
 {
+#if 0
 	struct bdbm_llm_noq_private* p;
 	uint64_t punit_id;
 
@@ -155,6 +155,7 @@ void llm_noq_end_req (struct bdbm_drv_info* bdi, struct bdbm_llm_req_t* llm_req)
 		BDBM_GET_NAND_PARAMS (bdi)->nr_chips_per_channel +
 		llm_req->phyaddr->chip_no;
 
+#endif
 	/* complete a lock */
 /*	bdbm_complete (p->punit_locks[punit_id]); */
 

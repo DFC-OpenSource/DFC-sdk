@@ -29,7 +29,7 @@ THE SOFTWARE.
 #include "types.h"
 #include "dev_dragonfire.h"
 
-extern unsigned long long int gc_phy_addr[70];
+extern unsigned long long int gc_phy_addr[80];
 extern uint8_t* ls2_virt_addr[5];
 #if 0
 void* bdbm_malloc_atomic(uint32_t a) {

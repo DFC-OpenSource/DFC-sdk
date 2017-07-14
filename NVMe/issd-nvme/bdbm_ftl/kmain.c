@@ -51,6 +51,8 @@ THE SOFTWARE.
 */
 #include <syslog.h>
 #include "ftl/page_ftl.h"
+#include <sched.h>
+
 /* for test */
 #ifdef BOARD_BSIM
 #include "test/nandsim.h"
@@ -62,112 +64,112 @@ uint8_t ftl_initialised = 0, ftl_stored = 0;
 
 static int init_func_pointers (struct bdbm_drv_info* bdi)
 {
-	struct bdbm_params* p = bdi->ptr_bdbm_params;
+struct bdbm_params* p = bdi->ptr_bdbm_params;
 
-	/* set functions for device manager (dm) */
-	switch (p->nand.device_type) {      // Add the iSSD card init here
+/* set functions for device manager (dm) */
+switch (p->nand.device_type) {      // Add the iSSD card init here
 #if 0
-	case DEVICE_TYPE_RAMDRIVE:
-		bdi->ptr_dm_inf = &_dm_ramdrive_inf;
-		break;
-	case DEVICE_TYPE_BLUESIM:
+case DEVICE_TYPE_RAMDRIVE:
+bdi->ptr_dm_inf = &_dm_ramdrive_inf;
+break;
+case DEVICE_TYPE_BLUESIM:
 #ifdef BOARD_BSIM
-		bdi->ptr_dm_inf = &_dm_bluesim_inf;
+bdi->ptr_dm_inf = &_dm_bluesim_inf;
 #else
-		bdbm_bug_on (1);
+bdbm_bug_on (1);
 #endif
-		break;
-	case DEVICE_TYPE_BLUEDBM_EMUL:
+break;
+case DEVICE_TYPE_BLUEDBM_EMUL:
 #ifdef BOARD_BLUEDBM
-		bdi->ptr_dm_inf = &_dm_bdbme_inf;
+bdi->ptr_dm_inf = &_dm_bdbme_inf;
 #else
-		bdbm_bug_on (1);
+bdbm_bug_on (1);
 #endif
-		break;
-	case DEVICE_TYPE_BLUEDBM:
+break;
+case DEVICE_TYPE_BLUEDBM:
 #ifdef BOARD_VC707
-		bdi->ptr_dm_inf = &_dm_bluedbm_inf;
+bdi->ptr_dm_inf = &_dm_bluedbm_inf;
 #else
-		bdbm_bug_on (1);
+bdbm_bug_on (1);
 #endif
-		break;
+break;
 #endif
-	case DEVICE_TYPE_DRAGON_FIRE:
-		bdi->ptr_dm_inf = &_dm_dragonfire_inf;
-		break;
-	default:
-		bdbm_error ("invalid NAND device");
-		bdbm_bug_on (1);
-		break;
-	}
+case DEVICE_TYPE_DRAGON_FIRE:
+bdi->ptr_dm_inf = &_dm_dragonfire_inf;
+break;
+default:
+bdbm_error ("invalid NAND device");
+bdbm_bug_on (1);
+break;
+}
 
-	/* set functions for host */
-	switch (p->driver.host_type) {  // add NVME specifc init if required -- currently not required
-	case HOST_BLOCK:
-		bdi->ptr_host_inf = &_host_block_inf;
-		break;
-	case HOST_DIRECT:
-	default:
-		bdbm_error ("invalid host type");
-		bdbm_bug_on (1);
-		break;
-	}
+/* set functions for host */
+switch (p->driver.host_type) {  // add NVME specifc init if required -- currently not required
+case HOST_BLOCK:
+bdi->ptr_host_inf = &_host_block_inf;
+break;
+case HOST_DIRECT:
+default:
+bdbm_error ("invalid host type");
+bdbm_bug_on (1);
+break;
+}
 
-	/* set functions for hlm */
-	switch (p->driver.hlm_type) {
-	case HLM_NO_BUFFER:
-		bdi->ptr_hlm_inf = &_hlm_nobuf_inf;   // No queueing - this will be used
-		break;
+/* set functions for hlm */
+switch (p->driver.hlm_type) {
+case HLM_NO_BUFFER:
+bdi->ptr_hlm_inf = &_hlm_nobuf_inf;   // No queueing - this will be used
+break;
 #if 0
-	case HLM_BUFFER:
-		bdi->ptr_hlm_inf = &_hlm_buf_inf;
-		break;
-	case HLM_RSD:
-		bdi->ptr_hlm_inf = &_hlm_rsd_inf;
-		break;
+case HLM_BUFFER:
+bdi->ptr_hlm_inf = &_hlm_buf_inf;
+break;
+case HLM_RSD:
+bdi->ptr_hlm_inf = &_hlm_rsd_inf;
+break;
 #endif
-	default:
-		bdbm_error ("invalid hlm type");
-		bdbm_bug_on (1);
-		break;
-	}
+default:
+bdbm_error ("invalid hlm type");
+bdbm_bug_on (1);
+break;
+}
 
-	/* set functions for llm */
-	switch (p->driver.llm_type) {
-	case LLM_NO_QUEUE:
-		bdi->ptr_llm_inf = &_llm_noq_inf;  // No queue - this will be used
-		break;
+/* set functions for llm */
+switch (p->driver.llm_type) {
+case LLM_NO_QUEUE:
+bdi->ptr_llm_inf = &_llm_noq_inf;  // No queue - this will be used
+break;
 #if 0
-	case LLM_MULTI_QUEUE:
-		bdi->ptr_llm_inf = &_llm_mq_inf;
-		break;
+case LLM_MULTI_QUEUE:
+bdi->ptr_llm_inf = &_llm_mq_inf;
+break;
 #endif
-	default:
-		bdbm_error ("invalid llm type");
-		bdbm_bug_on (1);
-		break;
-	}
+default:
+bdbm_error ("invalid llm type");
+bdbm_bug_on (1);
+break;
+}
 
-	/* set functions for ftl */
-	switch (p->driver.mapping_type) {
+/* set functions for ftl */
+switch (p->driver.mapping_type) {
 #if 0
-	case MAPPING_POLICY_NO_FTL:
-		bdi->ptr_ftl_inf = &_ftl_no_ftl; 
-		break;
-	case MAPPING_POLICY_SEGMENT:
-		bdi->ptr_ftl_inf = &_ftl_block_ftl;
-		break;
+case MAPPING_POLICY_NO_FTL:
+bdi->ptr_ftl_inf = &_ftl_no_ftl; 
+break;
+case MAPPING_POLICY_SEGMENT:
+bdi->ptr_ftl_inf = &_ftl_block_ftl;
+break;
 #endif
-	case MAPPING_POLICY_PAGE:
-		bdi->ptr_ftl_inf = &_ftl_page_ftl;
-		break;
-	default:
-		bdbm_error ("invalid ftl type");
-		bdbm_bug_on (1);
-		break;
-	}
+case MAPPING_POLICY_PAGE:
+bdi->ptr_ftl_inf = &_ftl_page_ftl;
+break;
+default:
+bdbm_error ("invalid ftl type");
+bdbm_bug_on (1);
+break;
+}
 
-	return 0;
+return 0;
 }
 
 /*#define RAM_CONSUMER*/
@@ -201,7 +203,7 @@ int bdbm_drv_init (nvme_drv_params **drv_params)
 	struct bdbm_hlm_inf_t* hlm = NULL;
 	struct bdbm_llm_inf_t* llm = NULL;
 	struct bdbm_ftl_inf_t* ftl = NULL;
-	int count;
+	/*int count;*/
 	uint64_t hidden_blk_cnt;
 	if (ftl_initialised == 1) {
 		goto skip_init; 
@@ -230,7 +232,6 @@ int bdbm_drv_init (nvme_drv_params **drv_params)
 		bdbm_error ("failed to read the default parameters");
 		goto fail;
 	}
-
 
 	/* set function pointers */
 	if (init_func_pointers (bdi) != 0) {
@@ -347,19 +348,24 @@ fail:
 
 int bdbm_drv_deinit (void)
 {
+	int ret = 0;
+	pid_t child_pid;
+	cpu_set_t cpuset;
+	int ret_val;
+
 	if (ftl_stored == 0) {
 		goto skip_deinit;
 	}
 	if (_bdi == NULL)
-		return;
+		return -1;
 	printf("bdbm_drv_deinit....\n");
 
-	/* display performance results */
+/* display performance results */
 // 	pmu_display (_bdi);
 // 	pmu_destory (_bdi);
 
 #ifdef BOARD_BSIM
-	/*bdbm_nandsim_thread_cleanup ();*/
+/*bdbm_nandsim_thread_cleanup ();*/
 #endif
 
 	if (_bdi->ptr_host_inf != NULL)
@@ -377,10 +383,42 @@ skip_deinit:
 		if (_bdi->ptr_ftl_inf->store)
 			_bdi->ptr_ftl_inf->store (_bdi, "/run/ftl.dat");
 #endif
+//bv_chg
+/*
+  ret = system("sh ./tar_n_cpy");
+  if(ret) {
+  bdbm_error ("Making TAR failed %u\n", ret);
+  }
+  syslog(LOG_INFO, "Tar completed");
+*/
+		
+#if 0
+		CPU_ZERO (&cpuset);
+		CPU_SET (6 , &cpuset);
+		ret_val = pthread_setaffinity_np ( pthread_self (),sizeof (cpu_set_t),&cpuset);
+		if (ret_val != 0) {
+			perror ("pthread_setset_thread_affinity_np");
+		}
+
+		child_pid = fork();
+		if ( child_pid == 0) {
+			/*Child process*/
+			//	syslog(LOG_INFO,"Into child process");
+			ret=execl("./tar_n_cpy","./tar_n_cpy",NULL);
+			//printf("Error in execl: %d",ret);
+			exit(0);
+		}else if (ret < 0) {
+			perror("Fork error");
+		}else {
+			waitpid(child_pid,&ret,0);
+			syslog(LOG_INFO,"Child process exited with %d",ret);
+		}
+
+#endif
 		printf("\n\tSTORING FLASH MANAGEMENT INFO SUCCESS\t\n");
 		ftl_stored = 1;
-		return;
-skip_store:
+		return 0;
+	skip_store:
 		_bdi->ptr_ftl_inf->destroy (_bdi);
 	}
 
@@ -406,13 +444,14 @@ skip_store:
 #endif
 
 	bdbm_msg ("[blueDBM is removed]");
+	return 0;
 }
 
 #if 0
-MODULE_AUTHOR ("Sungjin Lee <chamdoo@csail.mit.edu>");
-MODULE_DESCRIPTION ("BlueDBM Device Driver");
-MODULE_LICENSE ("GPL");
+	MODULE_AUTHOR ("Sungjin Lee <chamdoo@csail.mit.edu>");
+	MODULE_DESCRIPTION ("BlueDBM Device Driver");
+	MODULE_LICENSE ("GPL");
 
-module_init (bdbm_drv_init);
-module_exit (bdbm_drv_exit);
+	module_init (bdbm_drv_init);
+	module_exit (bdbm_drv_exit);
 #endif

@@ -4,6 +4,7 @@
 #include <syslog.h>
 #include "i2c_dimm.h"
 #include "nvme.h"
+#include "common.h"
 
 static int i2c_read(dimm_details dm,int i2c1_file)
 {
@@ -60,9 +61,7 @@ static unsigned long long int memory_calc(spd dimm)
     dev_width = (4 << (dimm.organization & 7));
     no_ranks  = (((dimm.organization >> 3) & 7)+1);
 
-    //    printf("cac:%llx, busW:%llx, devW:%llx, ranks:%llx\n",capacity,bus_width,dev_width,no_ranks);
     memory_capacity = (capacity >> 3) * bus_width / dev_width * no_ranks;
-    //    printf("memCap:%llx\n",memory_capacity);
     syslog(LOG_INFO,"memory Capacity:%llx\n",memory_capacity);
 
     if(memory_capacity > 0x200000000){		/*FPGA Supports only 8GB ddr address per dimm, so restrict DDR slot memory to 8GB*/
@@ -81,7 +80,7 @@ static int scan_i2c_bus(int i2c1_file, int addr)
             return 0;
         } else {
             printf("Error: Could not set "
-                    "address to 0x%02x", addr,
+                    "address to 0x%02x (%s)", addr,
                     strerror(errno));
             return -1;
         }
@@ -123,15 +122,14 @@ int get_dimm_info(NvmeCtrl *n)
     spd dimm;
     char *spd_buf;
     uint64_t ddr_size = 0;
-    uint64_t nand_card = 0;
 
     if((i2c1_file = open(I2C1_FILE_NAME, O_RDWR)) < 0) {
         return -1;
     }
     n->dm = calloc(4,sizeof(uint64_t));
     for(device_count = 0; device_count < no_of_dimm; device_count++) {
-        dm = malloc(sizeof(dimm_details));
-        spd_buf = dm->spd_array;
+	dm = malloc(sizeof(dimm_details));
+	spd_buf = dm->spd_array;
         if(!is_i2cdevice_present(i2c1_file,dimm_slot[device_count])) {
 
             check=0;
@@ -236,10 +234,12 @@ int get_dimm_info(NvmeCtrl *n)
 	}
 #endif
 	if(ddr_size){
-		n->namespace_size[0] = ddr_size;
+		n->namespace_size[1] = ddr_size;
 	}
+	n->namespace_size[0] = RAMDISK_MEM_SIZE;
 	syslog(LOG_INFO,"namespace_size: %lx\n",n->namespace_size[0]);
 	syslog(LOG_INFO,"dimm_module_type: %d\n",n->dimm_module_type);
+	//printf("namespace%d\t",n->ns_check);
     close(i2c1_file);
 
     return 0;

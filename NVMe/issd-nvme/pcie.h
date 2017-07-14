@@ -90,7 +90,7 @@ void unmapFpgaMem (uint64_t *vAddr, uint8_t numOfPages);
  * @return : NULL - failure (fd open or mmap failed)
  * 			 Non-NULL - valid mapped address
  */
-uint64_t mmap_prp_addr (uint64_t base_addr, uint64_t off_addr, uint8_t nPages, int *fd);
+uint64_t mmap_prp_addr (uint64_t base_addr, uint64_t off_addr, uint8_t nPages, int *fd, int ns_num);
 
 /**
  * @func   : mmap_queue_addr

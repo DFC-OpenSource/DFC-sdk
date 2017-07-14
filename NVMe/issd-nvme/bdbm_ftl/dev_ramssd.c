@@ -42,7 +42,7 @@ THE SOFTWARE.
 #include <fcntl.h>
 
 static int ramssd_fd = 0;
-extern unsigned long long int gc_phy_addr[70];
+extern unsigned long long int gc_phy_addr[80];
 extern uint8_t* ls2_virt_addr[3];
 
 
@@ -209,7 +209,6 @@ static uint8_t __ramssd_read_page (
 		goto fail;
 	}
 
-	//printf ("ptr_ramssd_addr: %p\n", ptr_ramssd_addr);
 	/* for better performance, RAMSSD directly copies the SSD data to kernel pages */
 	nr_pages = ptr_ramssd_info->nand_params->page_main_size / KERNEL_PAGE_SIZE;
 	if (ptr_ramssd_info->nand_params->page_main_size % KERNEL_PAGE_SIZE != 0) {
@@ -219,7 +218,6 @@ static uint8_t __ramssd_read_page (
 		goto fail;
 	}
 
-	//printf ("nr_pages: %d\n", nr_pages);
 	/* copy the main page data to a buffer */
 	for (loop = 0; loop < nr_pages; loop++) {
 		if (partial == 1 && kpg_flags[loop] == MEMFLAG_KMAP_PAGE) {
@@ -229,19 +227,16 @@ static uint8_t __ramssd_read_page (
 			/* it would be possible that part of the page was already read at the level of the cache */
 			continue;
 		}
-		//printf("ptr_page_data(RD) : %p\n",ptr_page_data[loop]);
 		void *dest;
 		dest = bdbm_memcpy (
 			ptr_page_data[loop], 
 			ptr_ramssd_addr + KERNEL_PAGE_SIZE * loop + offset, 
 			KERNEL_PAGE_SIZE-offset
 		);
-		//printf("Destination(RD) : %p\n",dest);
 	}
 
 	/* copy the OOB data to a buffer */
 	if (partial == 0 && oob && ptr_oob_data != NULL) {
-		//printf ("ptr_oob_data : %p\n",ptr_oob_data);
 		bdbm_memcpy (
 			ptr_oob_data, 
 			ptr_ramssd_addr + ptr_ramssd_info->nand_params->page_main_size,
@@ -250,7 +245,6 @@ static uint8_t __ramssd_read_page (
 	}
 
 fail:
-	//printf ("%s ret: %d\n", __func__, ret);
 	return ret;
 }
 
@@ -277,7 +271,6 @@ static uint8_t __ramssd_prog_page (
 		ret = 1;
 		goto fail;
 	}
-	//printf ("ptr_ramssd_addr: %p\n", ptr_ramssd_addr);
 
 	/* for better performance, RAMSSD directly copies the SSD data to pages */
 	nr_pages = ptr_ramssd_info->nand_params->page_main_size / KERNEL_PAGE_SIZE;
@@ -288,12 +281,8 @@ static uint8_t __ramssd_prog_page (
 		goto fail;
 	}
 
-	//printf ("copying to ptr_ramssd_addr: %d\n", nr_pages);
 	/* copy the main page data to a buffer */
 	for (loop = 0; loop < nr_pages; loop++) {
-		//printf("Source:%lx Dest:%lx\n",ptr_page_data[loop],ptr_ramssd_addr + KERNEL_PAGE_SIZE * loop + offset);
-		//printf("ptr_page_data : %p\n",ptr_page_data[loop]);
-		//printf("Channel:%lu Chip:%lu Block:%lu Page:%lu\n",channel_no,chip_no,block_no,page_no);
 		bdbm_memcpy (
 			ptr_ramssd_addr + KERNEL_PAGE_SIZE * loop + offset, 
 			ptr_page_data[loop], 
@@ -301,10 +290,8 @@ static uint8_t __ramssd_prog_page (
 		);
 	}
 
-	//printf ("copied to ptr_ramssd_addr\n");
 	/* copy the OOB data to a buffer */
 	if (oob && ptr_oob_data != NULL) {
-		//printf("ptr_oob_data : %p\n",ptr_oob_data);
 		bdbm_memcpy (
 			ptr_ramssd_addr + ptr_ramssd_info->nand_params->page_main_size,
 			ptr_oob_data,
@@ -567,12 +554,10 @@ static uint32_t __ramssd_send_cmd (
 	if (ptr_ramssd_info->nand_params->page_oob_size == 0)
 		use_oob = 0;
 
-	//printf ("ptr_req->req_type: %d\n", ptr_req->req_type);
 	switch (ptr_req->req_type) {
 		case REQTYPE_RMW_READ:
 			use_partial = 1;
 		case REQTYPE_READ:
-				//printf("RD REQ\n");
 		case REQTYPE_GC_READ:
 #ifdef PMT_ON_FLASH
 		case REQTYPE_LOAD:
@@ -596,7 +581,6 @@ static uint32_t __ramssd_send_cmd (
 		break;
 
 	case REQTYPE_WRITE:
-		//printf("WR REQ\n");
 	case REQTYPE_GC_WRITE:
 	case REQTYPE_RMW_WRITE:
 #ifdef PMT_ON_FLASH
@@ -620,7 +604,6 @@ static uint32_t __ramssd_send_cmd (
 		break;
 
 	case REQTYPE_GC_ERASE:
-		//printf("....REQTYPE_GC_ERASE....\n");
 #ifndef MTL
 		ret = __ramssd_erase_block (
 			ptr_ramssd_info, 
@@ -638,7 +621,6 @@ static uint32_t __ramssd_send_cmd (
 		break;
 
 	case REQTYPE_READ_DUMMY:
-		//printf("....REQTYPE_READ_DUMMY....\n");
 		/* do nothing for READ_DUMMY */
 		ret = 0;
 		break;
@@ -662,7 +644,6 @@ static uint32_t __ramssd_send_cmd (
 		break;
 	}
 
-//	printf ("%s ret: %d\n", __func__, ret);
 	return ret;
 }
 
@@ -972,13 +953,11 @@ uint32_t dev_ramssd_send_cmd (struct dev_ramssd_info* ptr_ramssd_info, struct bd
 	uint32_t ret;
 	// static int ch =0;
     //if(ch ==0) {
-//        printf("%s entered\n",__func__);
       //  ch++;
     //}
 
 
 	if ((ret = __ramssd_send_cmd (ptr_ramssd_info, llm_req)) == 0) {
-//		printf ("success __ramssd_send_cmd\n");
 #if 0
 		unsigned long flags;
 		int64_t target_elapsed_time_us = 0;
@@ -1044,7 +1023,6 @@ uint32_t dev_ramssd_send_cmd (struct dev_ramssd_info* ptr_ramssd_info, struct bd
 	}
 
 fail:
-//	printf ("ret: %d\n", ret);
 	return ret;
 }
 

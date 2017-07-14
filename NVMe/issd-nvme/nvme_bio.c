@@ -16,65 +16,13 @@
 static NvmeBioTarget *g_BioTarget;
 
 extern NvmeCtrl g_NvmeCtrl;
+#ifdef QDMA
+QdmaCtrl *g_QdmaCtrl;
+#endif
 
 extern void init_df_dma_mgr (FpgaCtrl *fpga);
 extern void deinit_df_dma_mgr (void);
 extern void init_dma_mgr(FpgaCtrl *fpga, DmaCtrl *dma);
-#ifndef STATIC_BIO
-inline int nvme_add_prp (nvme_bio *bio, uint64_t prp, uint64_t trans_len)
-{
-	if (bio->nprps == bio->nalloc) {
-		bio->nalloc = 2 * bio->nalloc + 1;
-		bio->prp = realloc (bio->prp, bio->nalloc * sizeof(uint64_t));
-		if (!bio->prp) {
-			perror ("realloc bio->prp");
-			syslog(LOG_ERR,"realloc prp bio failed\n");
-			return 1;
-		}
-		syslog(LOG_INFO,"realloc prpbio: %p\n", bio->prp);
-	}
-	bio->prp[bio->nprps] = prp;
-	bio->size += trans_len;
-	++bio->nprps;
-	return 0;
-}
-
-inline nvme_bio *nvme_bio_create (uint64_t nprps)
-{
-	nvme_bio *bio = calloc (1, sizeof (nvme_bio));
-
-	if (bio) {
-		bio->nalloc = nprps;
-		bio->prp = calloc (1, nprps * sizeof (uint64_t));
-		if (!bio->prp) {
-			FREE_VALID (bio);
-			perror ("bio->prp");
-		}
-	} else {
-		perror ("bio");
-	}
-
-	return bio;
-}
-
-inline void nvme_bio_destroy (nvme_bio **bio)
-{
-	//NvmeRequest *req = (NvmeRequest *)((*bio)->req_info);
-#if (CUR_SETUP != TARGET_SETUP && CUR_SETUP != TARGET_RD_SETUP && CUR_SETUP != STANDALONE_SETUP) 
-	uint16_t nprps = (*bio)->nprps;
-	uint64_t *prp = (*bio)->prp;
-	for (; nprps; nprps--, prp++) munmap ((uint64_t *)(*prp), getpagesize());
-	SAFE_CLOSE ((*bio)->fd_prp_mmap);
-
-#endif
-	if(*bio){
-		FREE_VALID ((*bio)->prp);
-		FREE_VALID ((*bio));
-	}else{
-		printf("######################## *bio is NULL ##############################\n");
-	}
-}
-#endif
 
 inline int nvme_bio_mmap_prps (nvme_bio *bio)
 {
@@ -86,7 +34,7 @@ inline int nvme_bio_mmap_prps (nvme_bio *bio)
 
 	for (; cnt < bio->nprps && vAddr; cnt++, prp++, vrp++) {
 		vAddr = mmap_prp_addr (g_NvmeCtrl.host.io_mem.addr, \
-				(uint64_t)(*prp), 1, &fd);
+				(uint64_t)(*prp), 1, &fd, bio->ns_num);
 		*vrp = vAddr;
 	}
 
@@ -121,14 +69,24 @@ int nvme_bio_request (nvme_bio *bio)
 
 	if (g_NvmeCtrl.target.mem_type[bio->ns_num] & LS2_DDR_NS) {
 		
-		uint64_t ramdisk_addr = (bio->slba[0] << BDRV_SECTOR_BITS) + \
+		uint64_t ramdisk_addr = (bio->slba << BDRV_SECTOR_BITS) + \
 					g_NvmeCtrl.target.ramdisk.mem.addr;
 		is_full_page = data_size >> PAGE_SHIFT;
+		uint64_t nlp = (data_size >> PAGE_SHIFT) + ((data_size%PAGE_SIZE) ? 1 : 0);
+#ifdef QDMA
+		qdma_bio *q_bio = malloc (sizeof(qdma_bio));
+		q_bio->size = bio->size;
+		q_bio->req_type = bio->req_type;
+		q_bio->req = bio->req_info;
+		q_bio->nlb = nlp;
+		q_bio->ualign = 0;
+#endif
 #ifdef CONTINUOUS_PRP
+#ifndef QDMA
 		uint64_t *prp_def = NULL;
 		int count, nlba_def;
 		int i = 0;
-		nlba_def = bio->nlb;
+		nlba_def = nlp;
 		int size = 0;
 		while (is_full_page) {
 			g_NvmeCtrl.dma.io_processor_st = 1; /*stage 1 */
@@ -141,6 +99,7 @@ int nvme_bio_request (nvme_bio *bio)
 				}
 			}
 			size = count << PAGE_SHIFT;
+			size = MIN(data_size, size);
 			ramdisk_prp_rw ((void *)(*prp), \
 					ramdisk_addr, bio->req_type, size);
 			prp = prp_def + 1;
@@ -148,10 +107,18 @@ int nvme_bio_request (nvme_bio *bio)
 			data_size -= size;
 			is_full_page = data_size >> PAGE_SHIFT;
 		}
+#endif
 #else
+		int i = 0;
 		while (is_full_page) {
+#ifdef QDMA
+			q_bio->prp[i] = *prp;
+			q_bio->ddr_addr[i] = ramdisk_addr;
+			i++;
+#else
 			ramdisk_prp_rw ((void *)(*prp), \
 					ramdisk_addr, bio->req_type, PAGE_SIZE);
+#endif
 			prp++;
 			ramdisk_addr += PAGE_SIZE;
 			data_size -= PAGE_SIZE;
@@ -159,14 +126,24 @@ int nvme_bio_request (nvme_bio *bio)
 		}
 #endif
 		if(data_size) {
+#ifdef QDMA
+			q_bio->prp[i] = *prp;
+			q_bio->ddr_addr[i] = ramdisk_addr;
+#else
 			ramdisk_prp_rw ((void *)(*prp), ramdisk_addr, \
 				bio->req_type, data_size % PAGE_SIZE);
+#endif
 		}
+#ifndef QDMA
+		nvme_rw_cb (bio->req_info, 0);
+#else
+		enqueue_bio_to_mq(q_bio, g_QdmaCtrl->qdma_mq_txid);
+#endif
 
 	} else if (g_NvmeCtrl.target.mem_type[bio->ns_num] & FPGA_DDR_NS) {
 #if 1
-		uint64_t lpa = (bio->slba[0] << BDRV_SECTOR_BITS);
-		uint64_t nlp = bio->nlb;
+		uint64_t lpa = (bio->slba << BDRV_SECTOR_BITS);
+		uint64_t nlp = (data_size >> PAGE_SHIFT) + ((data_size%PAGE_SIZE) ? 1 : 0);
 #else
 		uint64_t nSecPerPg = DDR_PAGE_SIZE / KERNEL_SECTOR_SIZE;
 		uint64_t lpa = (bio->slba / nSecPerPg);
@@ -174,24 +151,25 @@ int nvme_bio_request (nvme_bio *bio)
 #endif
 		is_full_page = data_size >> PAGE_SHIFT;
 #ifdef CONTINUOUS_PRP
-		uint64_t *prp_def = NULL;
-		int count, nlba_def;
+		uint64_t *prp_def = prp;
+		int count = 0;
 		int i = 0;
-		nlba_def = nlp;
-		int size = 0;
+		uint64_t nlba_def = nlp;
+		uint64_t size = 0;
+
 		while (is_full_page) {
 			g_NvmeCtrl.dma.io_processor_st = 1; /*stage 1 */
 			count = 1;
-			prp_def = prp;
 			for(; i < (nlba_def - 1); i++, count++, prp_def++, --nlp) {
 				if(((*(prp_def + 1)) - (*prp_def)) != 0x1000) {
+					prp_def++;
 					i++;
 					break;
 				}
                         }
-                        size = count << PAGE_SHIFT;
+			size = MIN(data_size, count << PAGE_SHIFT);
                         ret = make_dma_desc (*prp, lpa, size >> 2, bio->req_info, bio->req_type, !--nlp);
-                        prp = prp_def + 1;
+                        prp = prp_def;
                         lpa += size;
                         data_size -= size;
                         is_full_page = data_size >> PAGE_SHIFT;
@@ -223,38 +201,43 @@ int nvme_bio_request (nvme_bio *bio)
 
 int nvme_bio_init (NvmeCtrl *n)
 {
+
 	int ret = 0;
 	NvmeBioTarget *target = &n->target;
-#if (CUR_SETUP == TARGET_SETUP || CUR_SETUP == STANDALONE_SETUP)
+#ifdef QDMA
+	g_QdmaCtrl = &n->qdmactrl;
+#endif
 	/*Get Mountable memory (DDR|NAND) info -TODO*/
 	if(n->ns_check == DDR_ALONE) {
 		init_ddr_dma_mgr (&n->fpga, &n->dma);
-		target->mem_type[0] = FPGA_DDR_NS;
+		target->mem_type[1] = FPGA_DDR_NS;
 		n->dma.mem_type = NVME_BIO_DDR;
 	} else if( n->ns_check == NAND_ALONE) {
 		init_df_dma_mgr(&n->fpga);
-		target->mem_type[0] = FPGA_NAND_NS;
+		target->mem_type[1] = FPGA_NAND_NS;
 		n->dma.mem_type = NVME_BIO_NAND;
 		syslog(LOG_INFO,"SELECTED MEM_TYPE IS NAND");
 	} else if (n->ns_check == DDR_NAND) {
 		init_ddr_dma_mgr (&n->fpga, &n->dma);
 		init_df_dma_mgr(&n->fpga);
-		target->mem_type[0] = FPGA_DDR_NS;
-		n->dma.mem_type = NVME_BIO_DDR;
-		target->mem_type[1] = FPGA_NAND_NS;
-		n->dma.mem_type = NVME_BIO_NAND;
+		target->mem_type[1] = FPGA_DDR_NS;
+		/*n->dma.mem_type = NVME_BIO_DDR;*/
+		target->mem_type[2] = FPGA_NAND_NS;
+		n->dma.mem_type = NVME_BIO_TWO;
 	}
-#else
+	
 	/*We use ramdisk as target memory.. Setup ramdisk*/
-	JUMP_ON_ERROR (open_ramdisk (RAMDISK_PATH, RAMDISK_SZ_MB, \
-				&target->ramdisk), ret, " ");
+	JUMP_ON_ERROR (open_ramdisk (NULL, RAMDISK_MEM_SIZE,		\
+				     &target->ramdisk), ret, " ");
 	
 	target->mem_type[0] = LS2_DDR_NS;
 
-	syslog(LOG_INFO,"RAMDISK SIZE: %llu Bytes\n", RAMDISK_SZ_MB);
-#endif
+	syslog(LOG_INFO,"RAMDISK SIZE: %lu Bytes\n", RAMDISK_MEM_SIZE);
 
 	g_BioTarget = target;
+
+	ret = pthread_create (&n->io_processor_tid, NULL, io_processor, (void *)n);
+	if(ret) perror("io_processor");
 
 	return 0;
 
@@ -267,7 +250,6 @@ inline void nvme_bio_deinit (NvmeCtrl *n)
 	/*Should we flush or wait for flush in memory before ejecting? -TODO*/
 	NvmeBioTarget *target = &n->target;
 
-#if (CUR_SETUP == TARGET_SETUP || CUR_SETUP == STANDALONE_SETUP)
 	if(n->ns_check == DDR_ALONE) {
 		/*deinit ddr interface and close the ddr access channels -TODO*/
 		deinit_ddr_dma_mgr (); 
@@ -278,11 +260,10 @@ inline void nvme_bio_deinit (NvmeCtrl *n)
 		deinit_ddr_dma_mgr (); 
 		deinit_df_dma_mgr (); 
 	}
-#else
 	if (target->mem_type[0] & LS2_DDR_NS) {
 		close_ramdisk (&target->ramdisk);
 	}
-#endif
 	memset (target, 0, sizeof (NvmeBioTarget));
+	THREAD_CANCEL(n->io_processor_tid);
 }
 

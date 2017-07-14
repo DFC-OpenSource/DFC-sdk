@@ -5,7 +5,6 @@
 #include <stdint.h>
 
 
-#define STATIC_BIO
 //#define CONTINUOUS_PRP
 
 /**
@@ -18,31 +17,25 @@
  *  @nlb       : Number of required logical blocks
  *  @size      : Total size of data for bio operation
  *  @req_type  : Request type(read/write)
- *  @nalloc    : used for checking dynamic allocation for prp array
  *  @nprps     : number of prp's. Ranges 1 to maximum specified by bio requestor.
  *  @prp       : Contains the prp's which come under this request.
  */
 typedef struct nvme_bio {
 	void     *req_info;
-	uint16_t nalloc;
-	uint64_t slba[1];
-	uint64_t n_sectors;
+	uint64_t slba;
+	//uint64_t n_sectors;
 	uint64_t nlb;
 	uint64_t size;
 	uint8_t ns_num;
 	uint32_t req_type;
 	uint16_t nprps;
 	uint16_t offset;
-#ifdef STATIC_BIO
-	uint64_t prp[64];
-#else
-	uint64_t *prp;
-#endif
-#if (CUR_SETUP != TARGET_SETUP && CUR_SETUP != STANDALONE_SETUP)
-	uint64_t mapped_prp_addr[4];
-	int      fd_prp_mmap;
-#endif
+	uint64_t prp[128];
 	uint8_t is_seq;
+	uint8_t data_shift;
+#ifdef DDR_CACHE
+	uint64_t f_lba;
+#endif
 } nvme_bio;
 
 /**
@@ -68,7 +61,6 @@ int nvme_bio_request (nvme_bio *bio);
  */
 int validate_lba (nvme_bio);
 
-#ifdef STATIC_BIO
 static inline int nvme_add_prp (nvme_bio *bio, uint64_t prp, uint64_t trans_len)
 {
 	bio->prp[bio->nprps] = prp;
@@ -91,10 +83,6 @@ static inline int nvme_bio_allow_gc (void)
 #endif /*!GC_THREAD_ENABLED*/
 extern inline void ramdisk_prp_rw (void *prp, uint64_t ramdisk_addr, uint32_t req_type, uint64_t len);
 int nvme_add_prp (nvme_bio *bio, uint64_t prp, uint64_t trans_len);
-nvme_bio *nvme_bio_create (uint64_t nprps);
-void nvme_bio_destroy (nvme_bio **bio);
-int nvme_bio_mmap_prps (nvme_bio *bio);
-#endif
 inline int nvme_bio_mmap_prps (nvme_bio *bio);
 
 #endif /*#ifndef __NVME_BIO_H*/

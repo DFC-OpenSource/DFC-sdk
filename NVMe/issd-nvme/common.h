@@ -12,13 +12,37 @@
 #include <fcntl.h>
 
 #include "platform.h"
-
 #include "pcie.h"
 #include "nvme_regs.h"
 #include "dma_mgr.h"
 #include "dma_df_nand.h"
+#include "qdma_user_space_lib.h"
 
 #include <syslog.h>
+
+#define RAMDISK_MEM_ADDR 0x8200000000
+#define RAMDISK_MEM_SIZE 0x100000000
+
+#define DEV_MEM "/dev/mem"
+#if (CUR_SETUP == TARGET_SETUP)
+#define HOST_OUTBOUND_ADDR  0x1400000000        /*Outbound iATU Address*/
+#define HOST_OUTBOUND_SIZE  8ULL*1024*1024*1024 /*Outbound iATU size 4GB*/
+#define PCI_CONF_ADDR       0x3600000           /*PCIe3 config space address - According to LS2 DS*/
+#endif
+
+#define PEX2_BAR_NVME         2
+#define PEX2_BAR_FIFO         4
+#define PEX2_BAR_IOSQDB       4
+#define PEX2_BAR_DMA          2
+#define PEX2_BAR_DMA_CTRL     4
+#define PEX2_GPIO_CR          4
+#define PEX2_MSI_CR           2
+#define PEX2_BAR_VER          5
+
+#define PEX4_BAR_DMA          2
+#define PEX4_BAR_DMA_CTRL     4
+#define PEX4_GPIO_CR          4
+
 #define COND_SUCCESS   0
 #define RETURN_ON_ERROR(cond, ret, fmt, args...) \
 	do {                                         \
@@ -76,18 +100,13 @@ typedef struct NvmeTimer {
 #define FPGA_OFFS_FIFO_IRQ_CSR  0x0004 /*Unused in Target*/
 #define FPGA_OFFS_IOSQDBST      0x0005 /*5 to 8: 4 32 bit regs*/
 #define FPGA_OFFS_GPIO_CSR      0x0009
+#define FPGA_OFFS_GPIO_INT      0x4001
+#define FPGA_OFFS_MSI_INT       0x0700
 
-#if 0
-#define FPGA_OFFS_DMA_CSR       0x0000
-#define FPGA_OFFS_ICR           0x0001 /*Present from PCIe2 only*/
-#define FPGA_OFFS_DMA_TABLE_SZ  0x0002
-#define FPGA_OFFS_DMA_TABLE     0x1000
-#else
 #define FPGA_OFFS_DMA_CSR       0x2000
 #define FPGA_OFFS_ICR           0x2001 /*Present from PCIe2 only*/
 #define FPGA_OFFS_DMA_TABLE_SZ  0x2002
 #define FPGA_OFFS_DMA_TABLE     0x40000
-#endif
 
 /**
  * @Structure  : FpgaCtrl
@@ -115,6 +134,9 @@ typedef struct FpgaCtrl {
 	uint32_t     *fifo_reset;
 	uint32_t     *iosqdb_bits;
 	uint32_t     *gpio_csr;
+	uint32_t     *gpio_int;
+	uint64_t     *msi_int;
+	uint32_t     *nand_gpio_int;
 	uint32_t     *icr[2];
 	DmaRegs      dma_regs;
 	Nand_DmaRegs nand_dma_regs;
@@ -192,10 +214,6 @@ typedef struct icr_reg {
 	uint8_t     rsv6:3;
 	uint8_t     irq_stat:2;
 	/*Verify the values -TODO*/
-#define IRQ_DMA1 1
-#define IRQ_DMA2 2
-#define IRQ_FIFO 3
-#define IRQ_DB   4
 	uint32_t     rsv7:22;
 } icr_reg;
 
@@ -256,7 +274,6 @@ uint8_t* mmap_oob_addr(uint32_t oob_mem_size,int idx);
 
 #define nvme_timer_pending(timer) !nvme_timer_expired (timer)
 #define delete_nvme_timer(timer) delete_nvme_timer_fn (&timer)
-
 
 #endif /*#ifndef __COMMON_H*/
 

@@ -13,7 +13,7 @@
 #define GET_PAGE_NUM(x)  ((x) >> 12)
 #define NUM_DMA_CONTR	 2
 #define DMA_MASK 		 (NUM_DMA_CONTR - 1)
-#if (CUR_SETUP != STANDALONE_SETUP)
+#if 0
 #define DMA_MSI
 #endif
 
@@ -63,14 +63,14 @@ int make_dma_desc (uint64_t prp, uint64_t pa, uint64_t len, void *req_info, uint
 	desc.eoc = eoc;
 	desc.cmd_tag = g_DmaCtrl->head_idx;
 	desc.ownedByFpga = 1;
-#if (CUR_SETUP == STANDALONE_SETUP)
-	desc.irq_en = 0;
-#else
+#ifdef DMA_MSI
 	if(eoc) {
 		desc.irq_en = 1;
 	} else {
 		desc.irq_en = 0;
 	}
+#else
+	desc.irq_en = 0;
 #endif
 
 
@@ -174,10 +174,12 @@ static void setup_ddr_desc_array ()
 	}
 }
 
+#if 0
 static void setup_nand_desc_array ()
 {
 	/*Setup NAND descriptor array pattern -TODO*/
 }
+#endif
 
 void dma_default (void)
 {
@@ -195,7 +197,7 @@ void dma_default (void)
 void init_ddr_dma_mgr (FpgaCtrl *fpga, DmaCtrl *dma)
 {
 	DmaRegs *regs = &fpga->dma_regs;
-	int i = 0;
+	int i = 0, ret;
 
 	*(regs->table_sz[0]) =  DESC_TBL_ENTRIES * 32 ;
 	dma->regs = regs;
@@ -224,6 +226,8 @@ void init_ddr_dma_mgr (FpgaCtrl *fpga, DmaCtrl *dma)
 	dma_default ();
 
 	dma->is_active = 0;
+	ret = pthread_create (&g_NvmeCtrl.io_completer_tid_ddr, NULL, io_completer, (void *)&g_NvmeCtrl);
+	if(ret) perror("io_completer for DDR");
 }
 
 void inline deinit_ddr_dma_mgr (void)
@@ -244,6 +248,8 @@ void inline deinit_ddr_dma_mgr (void)
 		mutex_destroy(&g_DescSt[i].available);	
 #endif
 	}
+
+	THREAD_CANCEL(g_NvmeCtrl.io_completer_tid_ddr);
 
 }
 
@@ -284,7 +290,7 @@ void *io_completer (void *arg)
 	/*reset_dma_descriptors ();*/
 
 #ifdef DMA_MSI
-	fd = open("/dev/uio6", O_RDWR);
+	fd = open("/dev/uio0", O_RDWR);
 	if(fd < 0) {
 		perror("uio open");
 		return (void *)-1;
@@ -301,6 +307,7 @@ WAIT:
 			perror("config write:");
 			continue;
 		}
+		*(n->fpga.gpio_int) = *(n->fpga.gpio_int) & (~(0x8));
 
 		FD_SET(fd, &readfds);
 		rc = select(fd+1, &readfds, NULL, NULL, &timeout);
@@ -317,14 +324,8 @@ WAIT:
 			continue;
 		}
 #endif
-		usleep(10);
 		while(1) {
 			do {
-#ifndef DMA_MSI
-#ifndef SEMAPHORE_LOCK
-WAIT:
-#endif
-#endif
 #ifdef SEMAPHORE_LOCK
 #ifdef DMA_MSI
 				if((sem_trywait(&g_DescSt[g_DmaCtrl->tail_idx].used_desc)) < 0) {
@@ -335,15 +336,19 @@ WAIT:
 #endif
 				g_DmaCtrl->io_completer_st = IOCOMP_ST_GOT_DESC3;
 #else
-				mutex_lock (&g_DescSt[g_DmaCtrl->tail_idx].available);
-				g_DmaCtrl->io_completer_st = IOCOMP_ST_GOT_DESC3;
-				if (!g_DescSt[g_DmaCtrl->tail_idx].valid) {
+				do {
+					mutex_lock (&g_DescSt[g_DmaCtrl->tail_idx].available);
+					g_DmaCtrl->io_completer_st = IOCOMP_ST_GOT_DESC3;
+					if (g_DescSt[g_DmaCtrl->tail_idx].valid) {
+						break;
+					}
 					mutex_unlock (&g_DescSt[g_DmaCtrl->tail_idx].available);
-#ifndef DMA_MSI
+#ifdef DMA_MSI
+					goto WAIT;
+#else
 					usleep(1);
 #endif
-					goto WAIT;
-				}
+				} while (1);
 #endif
 				csf = (csf_reg *)((uint64_t *)g_DescSt[g_DmaCtrl->tail_idx].ptr + DMA_DDR_CSF_OFF);
 
@@ -382,7 +387,6 @@ WAIT:
 					}
 					printf("Controller Corrupted. Shutdown and Powerup the Host Machine\n");
 				}
-				printf("csf:%p id:%u tag: %u \n",csf, g_DmaCtrl->tail_idx, csf_bak->cmd_tag);
 			}
 			if (io_st) { /*DMA engine's halted(?).. restore it*/
 				printf("###################### DMA ENGINE HALTED ############################\n");

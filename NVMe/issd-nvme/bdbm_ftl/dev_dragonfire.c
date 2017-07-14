@@ -15,24 +15,36 @@ extern NvmeCtrl g_NvmeCtrl;
 extern atomic_t act_desc_cnt;
 
 extern int bdbm_badge_dimms (bdbm_dev_private_t *pdp);
+extern uint32_t df_setup_nand_desc (cmd_info_t *cmd);
 
 /****************************BDBM_LOAD**********************************/
 static void bdbm_find_last_good_block_in_chip (bdbm_nandaddr_t *spare, local_mem_t *lmem)
 {
-	int ret = 0;
+	/*int ret = 0;*/
 	sem_t waiter;
-
+	cmd_info_t cmd = {0};
 	sem_init (&waiter, 0, 0);
 
+	cmd.req_info = (void*)&waiter;
+	cmd.col_addr = spare->col;
+	cmd.oob_ptr = lmem->phy;
+	cmd.oob_len = ACTL_OOB_SIZE;
+	cmd.req_flag = DF_BIT_READ_OP | DF_BITS_MGMT_OOB | DF_BIT_CMD_END;
+	cmd.phyaddr = spare->row;
 	while (spare->row.block_no != (uint64_t)(-1)) {
-		df_setup_nand_rd_desc((void*)&waiter, &spare->row,  spare->col, \
-				lmem->phy, _dp.nand.page_oob_size, DF_BITS_MGMT_OOB);
-		//setup_nand_rd_desc (spare, lmem->phy, \
-				pdp.nand.page_oob_size, &waiter, &ret);
+		cmd.phyaddr.block_no = cmd.phyaddr.block_no * 2;
+		df_setup_nand_desc(&cmd);
+		/*setup_nand_rd_desc (spare, lmem->phy, \
+				pdp.nand.page_oob_size, &waiter, &ret);*/
 		sem_wait (&waiter);
 		if (*(lmem->virt) == 0xFF) { /* it's a good block */
-			/* could be (or can be) a magic block */
-			break;
+			cmd.phyaddr.block_no += 1;
+			df_setup_nand_desc(&cmd);
+			sem_wait (&waiter);
+			if (*(lmem->virt) == 0xFF) {
+				/* could be (or can be) a magic block */
+				break;
+			}
 		}
 		spare->row.block_no--;
 	}
@@ -40,7 +52,7 @@ static void bdbm_find_last_good_block_in_chip (bdbm_nandaddr_t *spare, local_mem
 	sem_destroy (&waiter);
 
 	if (spare->row.block_no == (uint64_t)(-1)) {
-		syslog (LOG_INFO,"no good block found: %lu-%lu-%lu-%lu-%u\n", \
+		syslog (LOG_INFO,"no good block found: %u-%u-%u-%u-%u\n", \
 				spare->row.channel_no, spare->row.chip_no, spare->row.block_no, \
 				spare->row.page_no, spare->col);
 		bdbm_bug_on (spare->row.block_no == (uint64_t)(-1));
@@ -102,7 +114,7 @@ static void bdbm_setup_pm_mgmt_blocks (bdbm_dev_private_t *pdp)
 	bdbm_nblock_st_t *pmtb_pool = pdp->bmi[MGMTB_PMTB_POOL];
 	uint32_t nr_chips = pdp->nand.nr_chips_per_ssd;
 	bdbm_nblock_st_t **mgmtBlks = pdp->mgmt_blocks;
-	uint32_t nBlks_PmtBPool = pdp->mgmt_blkptr[MGMTB_PMTB_POOL].nEntries;
+	/*uint32_t nBlks_PmtBPool = pdp->mgmt_blkptr[MGMTB_PMTB_POOL].nEntries;*/
 	uint32_t nr_dimms = pdp->dimms.nr_dimms;
 	uint32_t nr_mgmt_blks_per_chip = pdp->nr_mgmt_blocks_per_ssd/nr_chips;
 
@@ -137,8 +149,10 @@ static void bdbm_init_nand_params (bdbm_device_params_t *np, uint8_t  *virt)
 	memcpy(&op,virt,sizeof(ONFI_Param_Pg));
 	np->nr_chips_per_channel = NR_CHIPS_PER_CHANNEL;/*TODO need to update based on target and LUN count*/
 	np->nr_blocks_per_chip 	 = op.onfi_mem_org.blks_per_lun;
+	np->nr_blocks_per_chip 	 = NR_BLOCKS_PER_CHIP;
 	np->nr_pages_per_block 	 = op.onfi_mem_org.pgs_per_blk;
 	np->page_main_size 		 = op.onfi_mem_org.databytes_per_pg;
+	np->page_main_size 		 = NAND_PAGE_SIZE;
 	np->page_oob_size 		 = op.onfi_mem_org.sparebytes_per_pg;
 	np->page_oob_size		 = NAND_PAGE_OOB_SIZE;/*TODO need to remove after 4-1 mapping enabled*/
 	np->subpage_size 		 = KERNEL_PAGE_SIZE;
@@ -178,10 +192,14 @@ static void bdbm_read_nand_spd (bdbm_device_params_t *np)
 	local_mem_t lmem = {0};
 	sem_t waiter;
 	sem_init (&waiter, 0, 0);
-	struct bdbm_phyaddr_t phy_addr = {0};
+	cmd_info_t cmd = {0};
 	
 	bdbm_alloc_pv (&lmem, 256);
-	ret = df_setup_nand_rd_desc ((void*)&waiter,&phy_addr,0,lmem.phy,256,DF_BIT_CONFIG_IO|DF_BIT_SEM_USED);
+	cmd.req_info = (void*)&waiter;
+	cmd.host_ptr[0] = lmem.phy;
+	cmd.data_len[0] = 256;
+	cmd.req_flag = DF_BIT_CONFIG_IO | DF_BIT_SEM_USED | DF_BIT_READ_OP | DF_BIT_CMD_END;
+	ret = df_setup_nand_desc (&cmd);
 	sem_wait (&waiter); 
 
 	bdbm_init_nand_params (np, lmem.virt);
@@ -359,17 +377,19 @@ static void bdbm_reset_ssd (bdbm_dev_private_t *pdp)
 	uint64_t nr_target = 2;
 	uint64_t chip, i = 0;
 	uint32_t ret = 0;
-	bdbm_phyaddr_t phy_addr = {0};
+	cmd_info_t cmd = {0};
 	sem_t waiter;
 
 	sem_init (&waiter, 0, 0);
 
 	for (chip = 0; chip < nr_chips; chip++) {
-		phy_addr.channel_no = chip;
 		for (i = 0; i < nr_target; i++) {
-			phy_addr.chip_no = i * 2;
-			ret = df_setup_nand_desc((void*)&waiter, &phy_addr, 0, NULL, \
-					0, DF_BIT_MGMT_IO|DF_BIT_RESET_OP); 
+			cmd = (cmd_info_t){0};
+			cmd.req_info = (void*)&waiter;
+			cmd.phyaddr.channel_no = chip;
+			cmd.phyaddr.chip_no = i * 2;
+			cmd.req_flag = DF_BIT_MGMT_IO|DF_BIT_RESET_OP | DF_BIT_CMD_END;
+			ret = df_setup_nand_desc(&cmd); 
 			sem_wait (&waiter);
 		}
 	}
@@ -402,6 +422,60 @@ int setup_new_ssd_context (bdbm_dev_private_t *pdp)
 	return ret;
 }
 
+static void bdbm_erase_nand(bdbm_dev_private_t *pdp)
+{
+	uint64_t nr_chips = pdp->nand.nr_channels;
+	uint64_t nr_target = 4, i=0,block=0,chip;
+	uint32_t ret=0;
+	cmd_info_t cmd = {0};
+	sem_t waiter;
+
+	sem_init (&waiter, 0, 0);
+	for(block=0;block < 2096;block++){
+		for (i = 0; i < nr_target; i++) {
+			for (chip = 0; chip < nr_chips; chip++) {
+				cmd = (cmd_info_t){0};
+				cmd.req_info = (void*)&waiter;
+				cmd.phyaddr.channel_no = chip;
+				cmd.phyaddr.chip_no = i;
+				cmd.phyaddr.block_no = block;
+				cmd.req_flag = DF_BIT_MGMT_IO|DF_BIT_ERASE_OP | DF_BIT_CMD_END;
+				ret = df_setup_nand_desc(&cmd);
+				sem_wait (&waiter);
+			}
+		}
+	}
+	sem_destroy (&waiter);
+}
+
+static void bdbm_set_feature(bdbm_dev_private_t *pdp,uint16_t feat_addr, uint16_t feat_len,void *feat_data)
+{
+	uint64_t nr_chips = pdp->nand.nr_channels;
+	uint64_t nr_target = 2;
+	uint64_t chip, i = 0;
+	uint32_t ret = 0;
+	cmd_info_t cmd = {0};
+	sem_t waiter;
+
+	sem_init (&waiter, 0, 0);
+
+	for (chip = 0; chip < nr_chips; chip++) {
+		for (i = 0; i < nr_target; i++) {
+			cmd = (cmd_info_t){0};
+			cmd.req_info = (void*)&waiter;
+			cmd.phyaddr.channel_no = chip;
+			cmd.phyaddr.chip_no = i * 2;
+			cmd.data_len[0] = feat_len;
+			cmd.data_len[1] = feat_addr;
+			cmd.host_ptr[0] = (uint8_t*)feat_data;
+			cmd.req_flag = DF_BIT_MGMT_IO|DF_BIT_SETFEAT_OP | DF_BIT_CMD_END;
+			ret = df_setup_nand_desc(&cmd);
+			sem_wait (&waiter);
+		}
+	}
+	sem_destroy (&waiter);
+}
+
 int bdbm_get_dimm_status (bdbm_dev_private_t *pdp)
 {
 	/* last block, 1st page spare */
@@ -409,10 +483,30 @@ int bdbm_get_dimm_status (bdbm_dev_private_t *pdp)
 	local_mem_t lmem = {0};
 	int magic_done = 0;
 	uint32_t dimm_tags[2][2] = {{0}};
+	uint16_t cds_1[4] = {0,0,0,0},cds_2[4]={0,0,0,0},s_mode1[4]={0x21,0,0,0};
+	uint16_t en_odt[4]= {0x20,0,0,0},s_mode2[4]={0x22,0,0,0};
+	uint16_t async_5[4] = {0x5,0,0,0};
 	int ret = 0,i;
 	sem_t waiter;
-	
+	cmd_info_t cmd;
+
+#if 1
 	bdbm_reset_ssd (pdp);
+	if(g_NvmeCtrl.pex_count == 1) {
+#if 0
+		bdbm_set_feature(pdp,0x10,0x4,&cds_1);
+		bdbm_set_feature(pdp,0x80,0x4,&cds_2);
+		bdbm_set_feature(pdp,0x2,0x4,&en_odt);
+		bdbm_set_feature(pdp,0x1,0x4,&s_mode2);
+#endif
+		bdbm_set_feature(pdp,0x1,0x4,&s_mode1);
+	} else {
+		bdbm_set_feature(pdp,0x1,0x4,&async_5);
+	}
+	if(g_NvmeCtrl.nbe_flag == 1){
+		bdbm_erase_nand(pdp);
+	}
+#endif
 
 	ret = bdbm_detect_dimms (&pdp->dimms, &pdp->nand);
 	bdbm_bug_on (ret < 0);
@@ -422,7 +516,8 @@ int bdbm_get_dimm_status (bdbm_dev_private_t *pdp)
 	pdp->dimm_status = BDBM_ST_DIMMS_FRESH;
 
 	spare.row.block_no = pdp->nand.nr_blocks_per_chip - 1;
-	spare.col = pdp->nand.page_main_size;
+	//spare.col = pdp->nand.page_main_size;
+	spare.col = ACTL_PAGE_SIZE;
 
 	bdbm_alloc_pv (&lmem, pdp->nand.page_oob_size);
 
@@ -487,6 +582,7 @@ NEXT_DIMM:
 				goto CLEAN_EXIT;
 			}
 			spare.row.channel_no = pdp->nand.nr_channels/2;
+			spare.row.block_no = pdp->nand.nr_blocks_per_chip - 1;
 			magic_done = 2;
 			goto NEXT_DIMM;
 		} else {
@@ -504,10 +600,17 @@ NEXT_DIMM:
 CHECK_EXIT_ST:
 		spare_bk.row.page_no = pdp->nand.nr_pages_per_block - 1;
 		spare_bk.col = 0;
-		df_setup_nand_rd_desc ((void*)&waiter, &spare_bk.row, spare_bk.col, lmem.phy, \
-				pdp->nand.page_oob_size, DF_BITS_MGMT_PAGE);
-		//setup_nand_rd_desc (&spare, lmem.phy, \
-				pdp->nand.page_oob_size, &waiter, &ret);
+		cmd = (cmd_info_t){0};
+		cmd.req_info = (void*)&waiter;
+		cmd.phyaddr = spare_bk.row;
+		cmd.phyaddr.block_no = (cmd.phyaddr.block_no * 2) + 1;
+		cmd.col_addr = 0x0;
+		cmd.host_ptr[0] = lmem.phy;
+		cmd.data_len[0] = ACTL_OOB_SIZE;
+		cmd.req_flag = DF_BIT_READ_OP | DF_BITS_MGMT_PAGE | DF_BIT_CMD_END;
+		df_setup_nand_desc (&cmd);
+		/*setup_nand_rd_desc (&spare, lmem.phy, \
+				pdp->nand.page_oob_size, &waiter, &ret);*/
 		sem_wait (&waiter);
 		if (*(uint8_t *)lmem.virt == BDBM_ST_EXIT_GOOD) {
 			syslog (LOG_INFO,"found good dimm(s)!\n");
@@ -551,12 +654,14 @@ void bdbm_scan_bb_completion_cb (void *req_ptr, uint8_t *Buff, uint8_t ret)
 	bdbm_abm_info_t *bai = _dp.bai;
 	bdbm_abm_block_t *b = (bdbm_abm_block_t *)req_ptr;
 	if (*(Buff) != 0xFF) {
-		b->status = BDBM_ABM_BLK_BAD;
-		list_del (&b->list);
-		list_add_tail (&b->list, \
-				&(bai->list_head_bad[b->channel][b->chip]));
-		bai->nr_bad_blks++;
-		bai->nr_free_blks--;
+		if (b->status != BDBM_ABM_BLK_BAD) {
+			b->status = BDBM_ABM_BLK_BAD;
+			list_del (&b->list);
+			list_add_tail (&b->list, \
+					&(bai->list_head_bad[b->channel][b->chip]));
+			bai->nr_bad_blks++;
+			bai->nr_free_blks--;
+		}
 	}
 
 }
@@ -567,20 +672,21 @@ static int bdbm_rescan_all_blocks (bdbm_dev_private_t *pdp)
 	int chanCnt = 0, chipCnt = 0, blockCnt = 0;
 	bdbm_nandaddr_t blk_addr;
 	local_mem_t lmem = {0};
-	bdbm_abm_info_t *bai = pdp->bai;
+	/*bdbm_abm_info_t *bai = pdp->bai;*/
 	bdbm_abm_block_t *b = pdp->bai->blocks;
 	uint64_t nr_chips = pdp->nand.nr_chips_per_channel;
 	uint64_t nr_channels = pdp->nand.nr_channels;
 	uint64_t nr_blks = pdp->nand.nr_blocks_per_chip;
 	uint64_t blk_nr = 0;
 	sem_t waiter;
-	bdbm_nblock_st_t *mgmt_block;
+	/*bdbm_nblock_st_t *mgmt_block;*/
+	cmd_info_t cmd;
 	
 	sem_init (&waiter, 0, 0);
 
 	bdbm_alloc_pv (&lmem, pdp->nand.page_oob_size);
 	blk_addr.row.page_no = 0;
-	blk_addr.col = pdp->nand.page_main_size;
+	blk_addr.col = ACTL_PAGE_SIZE;
 	for (blockCnt = 0; blockCnt < nr_blks; blockCnt++) {
 		blk_addr.row.block_no = blockCnt;
 		for (chipCnt = 0; chipCnt < nr_chips; chipCnt++) {
@@ -590,10 +696,25 @@ static int bdbm_rescan_all_blocks (bdbm_dev_private_t *pdp)
 				blk_nr = (blk_addr.row.channel_no * pdp->nand.nr_blocks_per_channel) + \
 						 (blk_addr.row.chip_no * pdp->nand.nr_blocks_per_chip) + \
 						 blk_addr.row.block_no;
-				df_setup_nand_rd_desc ((void*)&pdp->bai->blocks[blk_nr], &blk_addr.row, blk_addr.col, \
-						NULL, pdp->nand.page_oob_size, DF_BITS_MGMT_OOB|DF_BIT_SCAN_BB);
-				//setup_nand_rd_desc (&blk_addr, lmem.phy, \
-				pdp->nand.page_oob_size, &waiter, &ret);
+				cmd = (cmd_info_t){0};
+				cmd.req_info = (void*)&pdp->bai->blocks[blk_nr];
+				cmd.phyaddr = blk_addr.row;
+				cmd.phyaddr.block_no *= 2;
+				cmd.col_addr = blk_addr.col;
+				cmd.oob_len = ACTL_OOB_SIZE;
+				cmd.req_flag = DF_BIT_READ_OP | DF_BITS_MGMT_OOB | DF_BIT_SCAN_BB | DF_BIT_CMD_END;
+				df_setup_nand_desc (&cmd);
+
+				cmd = (cmd_info_t){0};
+				cmd.req_info = (void*)&pdp->bai->blocks[blk_nr];
+				cmd.phyaddr = blk_addr.row;
+				cmd.phyaddr.block_no = (cmd.phyaddr.block_no * 2) + 1;
+				cmd.col_addr = blk_addr.col;
+				cmd.oob_len = ACTL_OOB_SIZE;
+				cmd.req_flag = DF_BIT_READ_OP | DF_BITS_MGMT_OOB | DF_BIT_SCAN_BB | DF_BIT_CMD_END;
+				df_setup_nand_desc (&cmd);
+				/*setup_nand_rd_desc (&blk_addr, lmem.phy, \
+				pdp->nand.page_oob_size, &waiter, &ret);*/
 			}
 		}
 	}
@@ -624,6 +745,7 @@ static int bdbm_load_mgmt_block_list (mgmt_list_type_t type, bdbm_dev_private_t 
 	bdbm_nblock_st_t *src, *destpbm;
 	bdbm_abm_block_t* destabm;
 	sem_t waiter;
+	cmd_info_t cmd = {0};
 	uint32_t nEntries = pdp->mgmt_blkptr[type].nEntries;
 	uint32_t entriesPerFPage = pdp->nand.page_main_size / \
 							   sizeof (bdbm_nblock_st_t);
@@ -648,11 +770,30 @@ static int bdbm_load_mgmt_block_list (mgmt_list_type_t type, bdbm_dev_private_t 
 	bdbm_alloc_pv (&lmem, pdp->nand.page_main_size);
 
 	for (i = 0; i < nFPages - 1; i++) {
-		df_setup_nand_rd_desc ((void*)&waiter, &addr.row, addr.col, lmem.phy, \
-				pdp->nand.page_main_size, DF_BITS_MGMT_PAGE);
-		//setup_nand_rd_desc (&addr, lmem.phy, \
-				pdp->nand.page_main_size, &waiter, &ret);
+		cmd = (cmd_info_t){0};
+		cmd.req_info = (void*)&waiter;
+		cmd.phyaddr = addr.row;
+		cmd.phyaddr.block_no *= 2;
+		cmd.col_addr = addr.col;
+		cmd.host_ptr[0] = lmem.phy;
+		cmd.data_len[0] = ACTL_PAGE_SIZE;
+		cmd.req_flag = DF_BIT_READ_OP | DF_BITS_MGMT_PAGE | DF_BIT_CMD_END; 
+		df_setup_nand_desc (&cmd);
+		/*setup_nand_rd_desc (&addr, lmem.phy, \
+				pdp->nand.page_main_size, &waiter, &ret);*/
 		sem_wait (&waiter);
+
+		cmd = (cmd_info_t){0};
+		cmd.req_info = (void*)&waiter;
+		cmd.phyaddr = addr.row;
+		cmd.phyaddr.block_no = (cmd.phyaddr.block_no * 2) + 1;
+		cmd.col_addr = addr.col;
+		cmd.host_ptr[0] = lmem.phy + ACTL_PAGE_SIZE;
+		cmd.data_len[0] = ACTL_PAGE_SIZE; 
+		cmd.req_flag = DF_BIT_READ_OP | DF_BITS_MGMT_PAGE | DF_BIT_CMD_END;
+		df_setup_nand_desc (&cmd);
+		sem_wait (&waiter);
+
 		src = (bdbm_nblock_st_t *)lmem.virt;
 		if (type != MGMTB_BMT) {
 			memcpy (destpbm, src, pdp->nand.page_main_size);
@@ -670,11 +811,28 @@ static int bdbm_load_mgmt_block_list (mgmt_list_type_t type, bdbm_dev_private_t 
 		addr.row.page_no += 1;
 		nEntries -= entriesPerFPage;
 	}
-	df_setup_nand_rd_desc ((void*)&waiter, &addr.row, addr.col, lmem.phy, \
-			pdp->nand.page_main_size, DF_BITS_MGMT_PAGE);
-	//setup_nand_rd_desc (&addr, lmem.phy, \
-			pdp->nand.page_main_size, &waiter, &ret);
+	cmd = (cmd_info_t){0};
+	cmd.req_info = (void*)&waiter;
+	cmd.phyaddr = addr.row;
+	cmd.phyaddr.block_no *= 2;
+	cmd.col_addr = addr.col;
+	cmd.host_ptr[0] = lmem.phy;
+	cmd.data_len[0] = ACTL_PAGE_SIZE;
+	cmd.req_flag = DF_BIT_READ_OP | DF_BITS_MGMT_PAGE | DF_BIT_CMD_END; 
+	df_setup_nand_desc (&cmd);
 	sem_wait (&waiter);
+
+	cmd = (cmd_info_t){0};
+	cmd.req_info = (void*)&waiter;
+	cmd.phyaddr = addr.row;
+	cmd.phyaddr.block_no = (cmd.phyaddr.block_no * 2) + 1;
+	cmd.col_addr = addr.col;
+	cmd.host_ptr[0] = lmem.phy + ACTL_PAGE_SIZE;
+	cmd.data_len[0] = ACTL_PAGE_SIZE; 
+	cmd.req_flag = DF_BIT_READ_OP | DF_BITS_MGMT_PAGE | DF_BIT_CMD_END;
+	df_setup_nand_desc (&cmd);
+	sem_wait (&waiter);
+
 	src = (bdbm_nblock_st_t *)lmem.virt;
 	if (type != MGMTB_BMT) {
 		memcpy (destpbm, src, nEntries * sizeof (bdbm_nblock_st_t));
@@ -696,6 +854,7 @@ static int bdbm_load_mgmt_block_list (mgmt_list_type_t type, bdbm_dev_private_t 
 	return ret;
 }
 
+#ifdef MGMT_DATA_ON_NAND
 static int bdbm_load_pmt (bdbm_dev_private_t *pdp)
 {
 	int ret = 0;
@@ -713,6 +872,7 @@ static int bdbm_load_pmt (bdbm_dev_private_t *pdp)
 	bdbm_abm_block_t* blks = pdp->bai->blocks;
 	uint64_t blk_nr;
 	uint64_t page_off;
+	cmd_info_t cmd = {0};
 
 	sem_init (&waiter, 0, 0);
 
@@ -732,10 +892,31 @@ static int bdbm_load_pmt (bdbm_dev_private_t *pdp)
 			if (pme_cnt > entriesPerFPage) {
 				phylen = pdp->nand.page_main_size;
 			}
-			df_setup_nand_rd_desc ((void*)&waiter, &addr.row, addr.col, lmem.phy, \
-					phylen, DF_BITS_MGMT_PAGE);
+			cmd = (cmd_info_t){0};
+			cmd.req_info = (void*)&waiter;
+			cmd.phyaddr = addr.row;
+			cmd.phyaddr.block_no *= 2;
+			cmd.col_addr = addr.col;
+			cmd.host_ptr[0] = lmem.phy;
+			cmd.data_len[0] = ACTL_PAGE_SIZE;
+			cmd.req_flag = DF_BIT_READ_OP | DF_BITS_MGMT_PAGE | DF_BIT_CMD_END; 
+			df_setup_nand_desc (&cmd);
+			/*df_setup_nand_rd_desc ((void*)&waiter, &addr.row, addr.col, lmem.phy, \
+					phylen, DF_BITS_MGMT_PAGE);*/
 			//setup_nand_rd_desc (&addr, lmem.phy, phylen, &waiter, &ret);
 			sem_wait (&waiter);
+
+			cmd = (cmd_info_t){0};
+			cmd.req_info = (void*)&waiter;
+			cmd.phyaddr = addr.row;
+			cmd.phyaddr.block_no = (cmd.phyaddr.block_no * 2) + 1;
+			cmd.col_addr = addr.col;
+			cmd.host_ptr[0] = lmem.phy + ACTL_PAGE_SIZE;
+			cmd.data_len[0] = ACTL_PAGE_SIZE; 
+			cmd.req_flag = DF_BIT_READ_OP | DF_BITS_MGMT_PAGE | DF_BIT_CMD_END;
+			df_setup_nand_desc (&cmd);
+			sem_wait (&waiter);
+
 			src = (bdbm_npme_t *)lmem.virt;
 			for (k = 0; k < phylen/sizeof(bdbm_npme_t); k++, dest++, src++) {
 				dest->phyaddr.channel_no = src->channel;
@@ -765,7 +946,7 @@ static int bdbm_load_pmt (bdbm_dev_private_t *pdp)
 
 	return ret;
 }
-
+#endif
 static int bdbm_load_mgmt_ptrs (bdbm_dev_private_t *pdp)
 {
 	int ret = 0;
@@ -774,6 +955,7 @@ static int bdbm_load_mgmt_ptrs (bdbm_dev_private_t *pdp)
 	bdbm_nandaddr_t addr;
 	local_mem_t lmem = {0};
 	sem_t waiter;
+	cmd_info_t cmd = {0};
 
 	sem_init (&waiter, 0, 0);
 
@@ -787,10 +969,27 @@ static int bdbm_load_mgmt_ptrs (bdbm_dev_private_t *pdp)
 
 	bdbm_alloc_pv (&lmem, pdp->nand.page_main_size);
 
-	df_setup_nand_rd_desc ((void*)&waiter, &addr.row, addr.col, lmem.phy, \
-			pdp->nand.page_main_size, DF_BITS_MGMT_PAGE);
-	//setup_nand_rd_desc (&addr, lmem.phy, \
-			pdp->nand.page_main_size, &waiter, &ret);
+	cmd.req_info = (void*)&waiter;
+	cmd.phyaddr = addr.row;
+	cmd.phyaddr.block_no *= 2;
+	cmd.col_addr = addr.col;
+	cmd.host_ptr[0] = lmem.phy;
+	cmd.data_len[0] = ACTL_PAGE_SIZE;
+	cmd.req_flag = DF_BIT_READ_OP | DF_BITS_MGMT_PAGE | DF_BIT_CMD_END; 
+	df_setup_nand_desc (&cmd);
+	/*setup_nand_rd_desc (&addr, lmem.phy, \
+			pdp->nand.page_main_size, &waiter, &ret);*/
+	sem_wait (&waiter);
+
+	cmd = (cmd_info_t){0};
+	cmd.req_info = (void*)&waiter;
+	cmd.phyaddr = addr.row;
+	cmd.phyaddr.block_no = (cmd.phyaddr.block_no * 2) + 1;
+	cmd.col_addr = addr.col;
+	cmd.host_ptr[0] = lmem.phy + ACTL_PAGE_SIZE;
+	cmd.data_len[0] = ACTL_PAGE_SIZE; 
+	cmd.req_flag = DF_BIT_READ_OP | DF_BITS_MGMT_PAGE | DF_BIT_CMD_END;
+	df_setup_nand_desc (&cmd);
 	sem_wait (&waiter);
 
 	for (i = 0, lptr = lmem.virt; i < MGMTB_MAX; i++) {
@@ -805,6 +1004,7 @@ static int bdbm_load_mgmt_ptrs (bdbm_dev_private_t *pdp)
 	return ret;
 }
 
+#ifdef MGMT_DATA_ON_NAND
 static void bdbm_update_blks_info_list (bdbm_dev_private_t *pdp)
 {
 	uint64_t i;
@@ -864,7 +1064,7 @@ static void bdbm_update_blks_info_list (bdbm_dev_private_t *pdp)
 			bai->nr_bad_blks);
 
 }
-
+#endif
 static void bdbm_get_mgmt_blk_info_list(bdbm_dev_private_t *pdp)
 {
 	uint8_t chan, chip;
@@ -937,6 +1137,7 @@ int bdbm_badge_dimms (bdbm_dev_private_t *pdp)
 	bdbm_nandaddr_t magic;
 	local_mem_t lmem = {0};
 	sem_t waiter;
+	cmd_info_t cmd = {0};
 
 	syslog (LOG_INFO,"badging %s dimm(s)\n", \
 			(pdp->dimm_status == BDBM_ST_EXIT_GOOD)?"Old":"as New");
@@ -950,7 +1151,7 @@ int bdbm_badge_dimms (bdbm_dev_private_t *pdp)
 	magic.row.chip_no = pdp->mgmt_blocks[0][0].chip;
 	magic.row.block_no = pdp->mgmt_blocks[0][0].block;
 	magic.row.page_no = 0;
-	magic.col = pdp->nand.page_main_size;
+	magic.col = ACTL_PAGE_SIZE;
 
 	*(uint32_t *)lmem.virt = MAGIC_KEY;
 
@@ -961,19 +1162,26 @@ int bdbm_badge_dimms (bdbm_dev_private_t *pdp)
 		tagPtr[0] = pdp->dimms.dimm_tags[0];
 		tagPtr[1] = pdp->dimms.dimm_tags[1];
 	}
-	df_setup_nand_erase_desc ((void*)&waiter, &magic.row, magic.col, \
-			NULL, 0, DF_BIT_MGMT_IO);
+	cmd.req_info = (void*)&waiter;
+	cmd.phyaddr = magic.row;
+	cmd.phyaddr.block_no = (cmd.phyaddr.block_no * 2) + 1;
+	cmd.req_flag = DF_BIT_ERASE_OP | DF_BIT_MGMT_IO | DF_BIT_CMD_END;
+	df_setup_nand_desc (&cmd);
 	//setup_nand_erase_desc (&magic, NULL, 0, &waiter, &ret);
 	sem_wait (&waiter);
 	bdbm_bug_on (ret != 0);
-	/*Send dummy main page write command in order to write on spare area alone*/
-	df_setup_nand_wr_desc (NULL, &magic.row, 0, \
-			NULL, 0, DF_BITS_MGMT_PAGE);
 
-	df_setup_nand_wr_desc ((void*)&waiter, &magic.row, magic.col, \
-			lmem.phy, pdp->nand.page_oob_size, DF_BITS_MGMT_OOB);
-	//setup_nand_wr_desc (&magic, lmem.phy, \
-			pdp->nand.page_oob_size, &waiter, &ret);
+	cmd = (cmd_info_t){0};
+	cmd.req_info = (void*)&waiter;
+	cmd.phyaddr = magic.row;
+	cmd.phyaddr.block_no = (cmd.phyaddr.block_no * 2) + 1;
+	cmd.col_addr = magic.col;
+	cmd.oob_ptr = lmem.phy;
+	cmd.oob_len =  ACTL_OOB_SIZE;
+	cmd.req_flag = DF_BIT_WRITE_OP | DF_BITS_MGMT_OOB | DF_BIT_CMD_END;
+	df_setup_nand_desc (&cmd);
+	/*setup_nand_wr_desc (&magic, lmem.phy, \
+			pdp->nand.page_oob_size, &waiter, &ret);*/
 	sem_wait (&waiter);
 	bdbm_bug_on (ret != 0);
 
@@ -992,20 +1200,27 @@ int bdbm_badge_dimms (bdbm_dev_private_t *pdp)
 			magic.row.chip_no = pdp->mgmt_blocks[magicblk2_idx][0].chip;
 			magic.row.block_no = pdp->mgmt_blocks[magicblk2_idx][0].block;
 		}
-		df_setup_nand_erase_desc ((void*)&waiter, &magic.row, magic.col, \
-				NULL, 0, DF_BIT_MGMT_IO);
+		cmd = (cmd_info_t){0};
+		cmd.req_info = (void*)&waiter;
+		cmd.phyaddr = magic.row;
+		cmd.phyaddr.block_no = (cmd.phyaddr.block_no * 2) + 1;
+		cmd.req_flag = DF_BIT_ERASE_OP | DF_BIT_MGMT_IO | DF_BIT_CMD_END;
+		df_setup_nand_desc (&cmd);
 		//setup_nand_erase_desc (&magic, NULL, 0, &waiter, &ret);
 		sem_wait (&waiter);
 		bdbm_bug_on (ret != 0);
 
-		/*Send dummy main page write command in order to write on spare area alone*/
-		df_setup_nand_wr_desc (NULL, &magic.row, 0, \
-				NULL, 0, DF_BITS_MGMT_PAGE);
-
-		df_setup_nand_wr_desc ((void*)&waiter, &magic.row, magic.col, \
-				lmem.phy, pdp->nand.page_oob_size, DF_BITS_MGMT_OOB);
-		//setup_nand_wr_desc (&magic, lmem.phy, \
-				pdp->nand.page_oob_size, &waiter, &ret);
+		cmd = (cmd_info_t){0};
+		cmd.req_info = (void*)&waiter;
+		cmd.phyaddr = magic.row;
+		cmd.phyaddr.block_no = (cmd.phyaddr.block_no * 2) + 1;
+		cmd.col_addr = magic.col;
+		cmd.oob_ptr = lmem.phy;
+		cmd.oob_len =  ACTL_OOB_SIZE;
+		cmd.req_flag = DF_BIT_WRITE_OP | DF_BITS_MGMT_OOB | DF_BIT_CMD_END;
+		df_setup_nand_desc (&cmd);
+		/*setup_nand_wr_desc (&magic, lmem.phy, \
+				pdp->nand.page_oob_size, &waiter, &ret);*/
 		sem_wait (&waiter);
 		bdbm_bug_on (ret != 0);
 		magic.row.channel_no = 0;
@@ -1035,6 +1250,7 @@ int bdbm_store_pmt (bdbm_dev_private_t *pdp)
 	bdbm_pme_t *src;
 	bdbm_npme_t *dest;
 	sem_t waiter;
+	cmd_info_t cmd = {0};
 
 	sem_init (&waiter, 0, 0);
 
@@ -1067,11 +1283,25 @@ ERASURE:
 		addr.row.chip_no = pmtb_curr->chip;
 		addr.row.block_no = pmtb_curr->block;
 		addr.row.page_no = 0;
-		df_setup_nand_erase_desc ((void*)&waiter, &addr.row, \
-				addr.col, NULL, 0, DF_BIT_MGMT_IO);
-		//setup_nand_erase_desc (&addr, lmem.phy, \
-				pdp->nand.page_main_size, &waiter, &ret);
+
+		cmd = (cmd_info_t){0};
+		cmd.req_info = (void*)&waiter;
+		cmd.phyaddr = addr.row;
+		cmd.phyaddr.block_no *= 2;
+		cmd.col_addr = addr.col;
+		cmd.req_flag = DF_BIT_ERASE_OP | DF_BIT_MGMT_IO | DF_BIT_CMD_END; 
+		df_setup_nand_desc (&cmd);
 		sem_wait (&waiter);
+
+		cmd = (cmd_info_t){0};
+		cmd.req_info = (void*)&waiter;
+		cmd.phyaddr = addr.row;
+		cmd.phyaddr.block_no = (cmd.phyaddr.block_no * 2) + 1;
+		cmd.col_addr = addr.col;
+		cmd.req_flag = DF_BIT_ERASE_OP | DF_BIT_MGMT_IO | DF_BIT_CMD_END; 
+		df_setup_nand_desc (&cmd);
+		sem_wait (&waiter);
+
 		if (ret) {
 			int ntemp = pdp->mgmt_blkptr[MGMTB_PMTB_POOL].nEntries - \
 						(pmtb_curr - pmtb_pool);
@@ -1099,11 +1329,29 @@ ERASURE:
 				dest->status = src->status;
 				pme_cnt--;
 			}
-			df_setup_nand_wr_desc ((void*)&waiter, &addr.row, addr.col, lmem.phy, \
-					pdp->nand.page_main_size, DF_BITS_MGMT_PAGE);
-			//setup_nand_wr_desc (&addr, lmem.phy, \
-					pdp->nand.page_main_size, &waiter, &ret);
+
+			cmd = (cmd_info_t){0};
+			cmd.req_info = (void*)&waiter;
+			cmd.phyaddr = addr.row;
+			cmd.phyaddr.block_no *= 2;
+			cmd.col_addr = addr.col;
+			cmd.host_ptr[0] = lmem.phy;
+			cmd.data_len[0] = ACTL_PAGE_SIZE;
+			cmd.req_flag = DF_BIT_WRITE_OP | DF_BITS_MGMT_PAGE | DF_BIT_CMD_END;
+			df_setup_nand_desc (&cmd);
 			sem_wait (&waiter);
+
+			cmd = (cmd_info_t){0};
+			cmd.req_info = (void*)&waiter;
+			cmd.phyaddr = addr.row;
+			cmd.phyaddr.block_no = (cmd.phyaddr.block_no * 2) + 1;
+			cmd.col_addr = addr.col;
+			cmd.host_ptr[0] = lmem.phy + ACTL_PAGE_SIZE;
+			cmd.data_len[0] = ACTL_PAGE_SIZE; 
+			cmd.req_flag = DF_BIT_WRITE_OP | DF_BITS_MGMT_PAGE | DF_BIT_CMD_END;
+			df_setup_nand_desc (&cmd);
+			sem_wait (&waiter);
+
 			addr.row.page_no += 1;
 		}
 		CIRC_INCR_PTR (pmtb_curr, pmtb_pool, nBlks_PmtBPool);
@@ -1144,6 +1392,7 @@ static int bdbm_store_mgmt_block_list (mgmt_list_type_t type, bdbm_dev_private_t
 	bdbm_nblock_st_t *dest, *srcpbm;
 	bdbm_abm_block_t* srcabm;
 	sem_t waiter;
+	cmd_info_t cmd;
 	uint32_t nEntries = pdp->mgmt_blkptr[type].nEntries;
 	uint32_t entriesPerFPage = pdp->nand.page_main_size / \
 							   sizeof (bdbm_nblock_st_t);
@@ -1179,11 +1428,28 @@ static int bdbm_store_mgmt_block_list (mgmt_list_type_t type, bdbm_dev_private_t
 
 			}
 		}
-		df_setup_nand_wr_desc ((void*)&waiter, &addr.row, addr.col, lmem.phy, \
-				pdp->nand.page_main_size, DF_BITS_MGMT_PAGE);
-		//setup_nand_wr_desc (&addr, lmem.phy, \
-				pdp->nand.page_main_size, &waiter, &ret);
+		cmd = (cmd_info_t){0};
+		cmd.req_info = (void*)&waiter;
+		cmd.phyaddr = addr.row;
+		cmd.phyaddr.block_no *= 2;
+		cmd.col_addr = addr.col;
+		cmd.host_ptr[0] = lmem.phy;
+		cmd.data_len[0] = ACTL_PAGE_SIZE;
+		cmd.req_flag = DF_BIT_WRITE_OP | DF_BITS_MGMT_PAGE | DF_BIT_CMD_END;
+		df_setup_nand_desc (&cmd);
 		sem_wait (&waiter);
+
+		cmd = (cmd_info_t){0};
+		cmd.req_info = (void*)&waiter;
+		cmd.phyaddr = addr.row;
+		cmd.phyaddr.block_no = (cmd.phyaddr.block_no * 2) + 1;
+		cmd.col_addr = addr.col;
+		cmd.host_ptr[0] = lmem.phy + ACTL_PAGE_SIZE;
+		cmd.data_len[0] = ACTL_PAGE_SIZE; 
+		cmd.req_flag = DF_BIT_WRITE_OP | DF_BITS_MGMT_PAGE | DF_BIT_CMD_END;
+		df_setup_nand_desc (&cmd);
+		sem_wait (&waiter);
+
 		addr.row.page_no += 1;
 		nEntries -= entriesPerFPage;
 	}
@@ -1202,10 +1468,26 @@ static int bdbm_store_mgmt_block_list (mgmt_list_type_t type, bdbm_dev_private_t
 
 		}
 	}
-	df_setup_nand_wr_desc ((void*)&waiter, &addr.row, addr.col, lmem.phy, \
-			pdp->nand.page_main_size, DF_BITS_MGMT_PAGE);
-	//setup_nand_wr_desc (&addr, lmem.phy, \
-			pdp->nand.page_main_size, &waiter, &ret);
+	cmd = (cmd_info_t){0};
+	cmd.req_info = (void*)&waiter;
+	cmd.phyaddr = addr.row;
+	cmd.phyaddr.block_no *= 2;
+	cmd.col_addr = addr.col;
+	cmd.host_ptr[0] = lmem.phy;
+	cmd.data_len[0] = ACTL_PAGE_SIZE;
+	cmd.req_flag = DF_BIT_WRITE_OP | DF_BITS_MGMT_PAGE | DF_BIT_CMD_END;
+	df_setup_nand_desc (&cmd);
+	sem_wait (&waiter);
+
+	cmd = (cmd_info_t){0};
+	cmd.req_info = (void*)&waiter;
+	cmd.phyaddr = addr.row;
+	cmd.phyaddr.block_no = (cmd.phyaddr.block_no * 2) + 1;
+	cmd.col_addr = addr.col;
+	cmd.host_ptr[0] = lmem.phy + ACTL_PAGE_SIZE;
+	cmd.data_len[0] = ACTL_PAGE_SIZE; 
+	cmd.req_flag = DF_BIT_WRITE_OP | DF_BITS_MGMT_PAGE | DF_BIT_CMD_END;
+	df_setup_nand_desc (&cmd);
 	sem_wait (&waiter);
 
 	bdbm_free_pv (&lmem);
@@ -1223,6 +1505,7 @@ static int bdbm_store_mgmt_ptrs (bdbm_dev_private_t *pdp)
 	bdbm_nandaddr_t addr;
 	local_mem_t lmem = {0};
 	sem_t waiter;
+	cmd_info_t cmd;
 
 	sem_init (&waiter, 0, 0);
 
@@ -1240,10 +1523,26 @@ static int bdbm_store_mgmt_ptrs (bdbm_dev_private_t *pdp)
 		memcpy (lptr, &pdp->mgmt_blkptr[i], sizeof (bdbm_mgmt_dptr_t));
 	}
 
-	df_setup_nand_wr_desc ((void*)&waiter, &addr.row, addr.col, lmem.phy, \
-			pdp->nand.page_main_size, DF_BITS_MGMT_PAGE);
-	//setup_nand_wr_desc (&addr, lmem.phy, \
-			pdp->nand.page_main_size, &waiter, &ret);
+	cmd = (cmd_info_t){0};
+	cmd.req_info = (void*)&waiter;
+	cmd.phyaddr = addr.row;
+	cmd.phyaddr.block_no *= 2;
+	cmd.col_addr = addr.col;
+	cmd.host_ptr[0] = lmem.phy;
+	cmd.data_len[0] = ACTL_PAGE_SIZE;
+	cmd.req_flag = DF_BIT_WRITE_OP | DF_BITS_MGMT_PAGE | DF_BIT_CMD_END;
+	df_setup_nand_desc (&cmd);
+	sem_wait (&waiter);
+
+	cmd = (cmd_info_t){0};
+	cmd.req_info = (void*)&waiter;
+	cmd.phyaddr = addr.row;
+	cmd.phyaddr.block_no = (cmd.phyaddr.block_no * 2) + 1;
+	cmd.col_addr = addr.col;
+	cmd.host_ptr[0] = lmem.phy + ACTL_PAGE_SIZE;
+	cmd.data_len[0] = ACTL_PAGE_SIZE; 
+	cmd.req_flag = DF_BIT_WRITE_OP | DF_BITS_MGMT_PAGE | DF_BIT_CMD_END;
+	df_setup_nand_desc (&cmd);
 	sem_wait (&waiter);
 
 	sem_destroy (&waiter);
@@ -1259,6 +1558,7 @@ static int bdbm_store_exit_status (bdbm_dev_private_t *pdp)
 	bdbm_nandaddr_t addr;
 	local_mem_t lmem = {0};
 	sem_t waiter;
+	cmd_info_t cmd;
 
 	sem_init (&waiter, 0, 0);
 
@@ -1272,10 +1572,15 @@ static int bdbm_store_exit_status (bdbm_dev_private_t *pdp)
 
 	*lmem.virt = BDBM_ST_EXIT_GOOD;
 
-	df_setup_nand_wr_desc ((void*)&waiter, &addr.row, addr.col, lmem.phy, \
-			pdp->nand.page_oob_size, DF_BITS_MGMT_PAGE);
-	//setup_nand_wr_desc (&addr, lmem.phy, \
-			pdp->nand.page_oob_size, &waiter, &ret);
+	cmd = (cmd_info_t){0};
+	cmd.req_info = (void*)&waiter;
+	cmd.phyaddr = addr.row;
+	cmd.phyaddr.block_no = (cmd.phyaddr.block_no * 2) + 1;
+	cmd.col_addr = addr.col;
+	cmd.host_ptr[0] = lmem.phy;
+	cmd.data_len[0] = ACTL_OOB_SIZE;
+	cmd.req_flag = DF_BIT_WRITE_OP | DF_BITS_MGMT_PAGE | DF_BIT_CMD_END;
+	df_setup_nand_desc (&cmd);
 	sem_wait (&waiter);
 
 	sem_destroy (&waiter);

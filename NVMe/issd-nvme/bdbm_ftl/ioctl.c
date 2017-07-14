@@ -41,7 +41,7 @@ THE SOFTWARE.
 extern struct bdbm_drv_info* _bdi;
 
 /*DECLARE_COMPLETION(task_completion); */
-static struct task_struct *task = NULL;
+/*static struct task_struct *task = NULL;*/
 
 
 int badblock_scan_thread_fn (void* arg) 

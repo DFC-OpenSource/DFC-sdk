@@ -149,15 +149,11 @@ uint32_t dm_ramdrive_make_req (struct bdbm_drv_info* bdi, struct bdbm_llm_req_t*
 		bdbm_error ("dev_ramssd_send_cmd failed");
 		/* there is nothing to do */
 	}
-#ifdef COMT3
 	if(ptr_llm_req != NULL) {
 		if(ptr_llm_req->req_type == REQTYPE_READ_DUMMY || ptr_llm_req->req_type == REQTYPE_TRIM) {
 			__dm_ramdrive_ih ((void *)ptr_llm_req, NULL, 0);
 		}
 	}
-#else
-	__dm_ramdrive_ih ((void *)ptr_llm_req, NULL, 0);
-#endif
 
 	return ret;
 }

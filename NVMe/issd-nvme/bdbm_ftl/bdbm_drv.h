@@ -36,6 +36,7 @@ THE SOFTWARE.
 
 #define PAGE_SIZE 	4096
 #define KERNEL_PAGE_SIZE	PAGE_SIZE
+#define KERNEL_PAGE_SHIFT	12
 #define PAGE_OOB_OFF 4
 #define MTL
 #define SNAPSHOT_ENABLE
@@ -200,7 +201,8 @@ struct bdbm_llm_req_t {
 	struct list_head list;	/* for list management */
 	void* ptr_qitem;
 	uint8_t ret;	/* old for GC */
-	uint8_t offset;
+	uint8_t *offset;
+	uint8_t nr_subpgs;
 };
 
 /* a generic host interface */
@@ -254,7 +256,7 @@ struct bdbm_queue_inf_t {
 	uint8_t (*is_empty) (struct bdbm_drv_info* bdi, uint64_t punit);
 };
 
-#define GC_THREAD_ENABLED 1
+//#define GC_THREAD_ENABLED 1
 
 /* a generic FTL interface */
 struct bdbm_ftl_inf_t {

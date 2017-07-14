@@ -73,7 +73,7 @@ void __bdbm_abm_check_status (struct bdbm_abm_info* bai)
 static inline
 void __bdbm_abm_display_status (struct bdbm_abm_info* bai) 
 {
-	bdbm_msg ("[ABM] Total: %lu => Free:%lu, Free(prepare):%lu, Clean:%lu, Dirty:%lu, Bad:%lu",
+	bdbm_msg ("[ABM] Total: %lu => Free:%lu, Free(prepare):%lu, Clean:%lu, Dirty:%lu, Mgmt:%lu, Bad:%lu",
 		bai->nr_total_blks,
 		bai->nr_free_blks, 
 		bai->nr_free_blks_prepared, 
@@ -281,9 +281,10 @@ struct bdbm_abm_block_t* bdbm_abm_get_free_block_prepare (
 	struct list_head* pos = NULL;
 	struct bdbm_abm_block_t* blk = NULL;
 	uint32_t cnt = 0;
+#if 0
 	uint64_t punit_id;
 	punit_id = (channel_no * bai->np->nr_chips_per_channel) + chip_no;
-
+#endif
 	if (bai->nr_free_blks == 0) {
 		bdbm_msg ("oops! bai->nr_free_blks == 0");
 	}
@@ -385,7 +386,7 @@ void bdbm_abm_erase_block (
 	}
 
 	if (blk->channel_no != channel_no || blk->chip_no != chip_no || blk->block_no != block_no) {
-		bdbm_error ("wrong block is chosen (%lu,%lu,%lu) != (%lu,%lu,%lu)",
+		bdbm_error ("wrong block is chosen (%u,%u,%u) != (%lu,%lu,%lu)",
 			blk->channel_no, blk->chip_no, blk->block_no,
 			channel_no, chip_no, block_no);
 		return;
@@ -431,7 +432,7 @@ void bdbm_abm_erase_block (
 		bai->nr_bad_blks++;
 		blk->status = BDBM_ABM_BLK_BAD;	/* mark it bad */
 
-		bdbm_msg ("[BAD-BLOCK - MARKED] b:%lu c:%lu b:%lu p/e:%u", 
+		bdbm_msg ("[BAD-BLOCK - MARKED] b:%u c:%u b:%u p/e:%u", 
 			blk->channel_no, 
 			blk->chip_no, 
 			blk->block_no, 

@@ -1334,9 +1334,10 @@ pthread_t cli_tid;
 
 void *cli(void *arg) 
 {
+	printf("\tcli\n");
 	void *ret = NULL;
 
-	set_thread_affinity (1, pthread_self ());
+	set_thread_affinity (3, pthread_self ());
 	telnetd_task();
 	pthread_join (cli_tid, NULL);
 

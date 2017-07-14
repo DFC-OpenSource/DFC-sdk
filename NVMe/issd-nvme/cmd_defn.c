@@ -46,7 +46,7 @@ int wearing_info (U32 argc, char **argv, contextInfo_t *c)
 		for (chip = 0;chip < np->nr_chips_per_channel; chip++) {
 			list_for_each (pos, &(bai->list_head_free[channel][chip])) {
 				blk = list_entry (pos, struct bdbm_abm_block_t, list);
-				fprintf(fp,"\nChannel : %lu  Chip : %lu  Blk : %lu",blk->channel_no,blk->chip_no,blk->block_no);
+				fprintf(fp,"\nChannel : %u  Chip : %u  Blk : %u",blk->channel_no,blk->chip_no,blk->block_no);
 				loop++;
 			}
 		}
@@ -59,7 +59,7 @@ int wearing_info (U32 argc, char **argv, contextInfo_t *c)
 		for (chip = 0;chip < np->nr_chips_per_channel; chip++) {
 			list_for_each (pos, &(bai->list_head_clean[channel][chip])) {
 				blk = list_entry (pos, struct bdbm_abm_block_t, list);
-				fprintf(fp,"\nChannel : %lu  Chip : %lu  Blk : %lu",blk->channel_no,blk->chip_no,blk->block_no);
+				fprintf(fp,"\nChannel : %u  Chip : %u  Blk : %u",blk->channel_no,blk->chip_no,blk->block_no);
 				loop++;
 			}
 		}
@@ -72,7 +72,7 @@ int wearing_info (U32 argc, char **argv, contextInfo_t *c)
 		for (chip = 0;chip < np->nr_chips_per_channel; chip++) {
 			list_for_each (pos, &(bai->list_head_dirty[channel][chip])) {
 				blk = list_entry (pos, struct bdbm_abm_block_t, list);
-				fprintf(fp,"\nChannel : %lu  Chip : %lu  Blk : %lu",blk->channel_no,blk->chip_no,blk->block_no);
+				fprintf(fp,"\nChannel : %u  Chip : %u  Blk : %u",blk->channel_no,blk->chip_no,blk->block_no);
 				loop++;
 			}
 		}
@@ -85,7 +85,7 @@ int wearing_info (U32 argc, char **argv, contextInfo_t *c)
 		for (chip = 0;chip < np->nr_chips_per_channel; chip++) {
 			list_for_each (pos, &(bai->list_head_mgmt[channel][chip])) {
 				blk = list_entry (pos, struct bdbm_abm_block_t, list);
-				fprintf(fp,"\nChannel : %lu  Chip : %lu  Blk : %lu",blk->channel_no,blk->chip_no,blk->block_no);
+				fprintf(fp,"\nChannel : %u  Chip : %u  Blk : %u",blk->channel_no,blk->chip_no,blk->block_no);
 				loop++;
 			}
 		}
@@ -98,7 +98,7 @@ int wearing_info (U32 argc, char **argv, contextInfo_t *c)
 		for (chip = 0;chip < np->nr_chips_per_channel; chip++) {
 			list_for_each (pos, &(bai->list_head_bad[channel][chip])) {
 				blk = list_entry (pos, struct bdbm_abm_block_t, list);
-				fprintf(fp,"\nChannel : %lu  Chip : %lu  Blk : %lu",blk->channel_no,blk->chip_no,blk->block_no);
+				fprintf(fp,"\nChannel : %u  Chip : %u  Blk : %u",blk->channel_no,blk->chip_no,blk->block_no);
 				loop++;
 			}
 		}
@@ -107,20 +107,20 @@ int wearing_info (U32 argc, char **argv, contextInfo_t *c)
 
 	fprintf(fp,"\n\nActive blocks list");
 	for (loop = 0; loop < np->nr_channels * np->nr_chips_per_channel; loop++) {
-		fprintf(fp,"\nChannel : %lu  Chip : %lu  Blk : %lu  Status : %d  Erase : %u  Invalid_pge : %d", \
+		fprintf(fp,"\nChannel : %u  Chip : %u  Blk : %u  Status : %d  Erase : %u  Invalid_pge : %d", \
 				ac_bab[loop]->channel_no,ac_bab[loop]->chip_no,ac_bab[loop]->block_no, \
 				ac_bab[loop]->status,ac_bab[loop]->erase_count,ac_bab[loop]->nr_invalid_subpages);
 	}
 
 	fprintf(fp,"\n\n\n>>>>>BLOCK INFO<<<<<");
 	for (loop = 0; loop < np->nr_blocks_per_ssd; loop++) {
-		fprintf(fp,"\nChannel : %lu  Chip : %lu  Blk : %lu",bai->blocks[loop].channel_no, \
+		fprintf(fp,"\nChannel : %u  Chip : %u  Blk : %u",bai->blocks[loop].channel_no, \
 				bai->blocks[loop].chip_no,bai->blocks[loop].block_no);
 		fprintf(fp,"\n1. Erase count : %u\n2. Number of invalid pages : %d", \
 				bai->blocks[loop].erase_count,bai->blocks[loop].nr_invalid_subpages);
 		fprintf(fp,"\n3. Block status : %d",bai->blocks[loop].status);
 		fprintf(fp,"\n4. Page status :\n{\n");
-		for (page_no = 0; page_no < np->nr_pages_per_block; page_no++) {
+		for (page_no = 0; page_no < np->nr_subpages_per_block; page_no++) {
 			fprintf(fp,"%d ",bai->blocks[loop].pst[page_no]);
 		}
 		fprintf(fp,"\n}\n\n\n");

@@ -29,18 +29,17 @@ THE SOFTWARE.
 
 
 #define NR_PAGES_PER_BLOCK      		512
-#define NR_BLOCKS_PER_CHIP      		2096
+#define NR_BLOCKS_PER_CHIP      		256	
 #define NR_CHIPS_PER_CHANNEL			4	/*Four LUNs per chip in a NAND DIMM*/
 #define NR_CHANNELS				8	/*Four Chips in a NAND DIMM, we are using two dimms*/
 
 /* NAND parameters */
-#define NAND_PAGE_SIZE         			16384
+#define NAND_PAGE_SIZE         			32768
 /*#define NAND_PAGE_SIZE         			8192*/
 /*#define NAND_PAGE_SIZE         			4096*/
 /*#define NAND_PAGE_SIZE         			16384*/
 //#define NAND_PAGE_OOB_SIZE     			64
-#define NAND_PAGE_OOB_SIZE     			1024
-#define NAND_OOB_OFFSET					16318
+#define NAND_PAGE_OOB_SIZE     			2048
 //#define NAND_PAGE_OOB_SIZE     			0
 /*#define NR_PAGES_PER_BLOCK      		128*/
 /*#define NR_BLOCKS_PER_CHIP      		1024*/
@@ -111,6 +110,7 @@ THE SOFTWARE.
 #define QUEUE_MULTI_FIFO				2
 
 #define KERNEL_SECTOR_SIZE				512		/* kernel sector size is usually set to 512 bytes */
+#define KERNEL_SECTOR_SZ_SHIFT				9		/* kernel sector size is usually set to 512 bytes */
 
 #define TRIM_ENABLE						1		/* 1: enable, 2: disable */
 #define TRIM_DISABLE					2

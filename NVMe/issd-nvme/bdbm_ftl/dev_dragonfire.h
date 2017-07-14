@@ -22,6 +22,8 @@
 #define KPAGE_SIZE 4096
 #endif
 
+#define ACTL_PAGE_SIZE 16384
+#define ACTL_OOB_SIZE 1024
 /* Magic key:
  * 155D - iSSD
  * DF   - DragonFire
@@ -78,6 +80,18 @@ enum BDBM_PFTL_PAGE_STATUS {
 	PFTL_PAGE_INVALID,
 	PFTL_PAGE_INVALID_ADDR = -1,
 };
+
+typedef struct bdbm_cmd_info {
+	void *req_info;
+	bdbm_phyaddr_t phyaddr;
+	uint32_t col_addr;
+	uint8_t *host_ptr[4];
+	uint32_t data_len[4];
+	uint8_t *oob_ptr;
+	uint32_t oob_len;
+	uint32_t req_flag;
+	uint8_t is_Mul_Pln;
+} cmd_info_t;
 
 typedef struct local_mem {
 	uint8_t  *phy;

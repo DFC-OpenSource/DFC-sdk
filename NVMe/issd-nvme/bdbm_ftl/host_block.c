@@ -21,7 +21,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
-//#define PLOCK
 #include "bdbm_drv.h"
 #include "debug.h"
 #include "platform.h"
@@ -33,6 +32,7 @@ THE SOFTWARE.
 /*#include "utils/time.h" */
 
 /*#define ENABLE_DISPLAY*/
+extern void nvme_bio_cb(nvme_bio *bio,int ret);
 
 unsigned int host_block_open (struct bdbm_drv_info* bdi);
 void host_block_close (struct bdbm_drv_info* bdi);
@@ -71,12 +71,13 @@ static struct bdbm_hlm_req_t* __host_block_create_hlm_trim_req (
 	struct nvme_bio* bio)
 {
 	struct bdbm_hlm_req_t* hlm_req = NULL;
+#if 0
 	struct nand_params* np = &bdi->ptr_bdbm_params->nand;
 	struct driver_params* dp = &bdi->ptr_bdbm_params->driver;
 	unsigned long nr_secs_per_fp = 0;
 
-	nr_secs_per_fp = np->page_main_size / KERNEL_SECTOR_SIZE;
-
+	nr_secs_per_fp = np->page_main_size >> KERNEL_SECTOR_SZ_SHIFT;
+#endif
 	/* create bdbm_hm_req_t */
 	if ((hlm_req = (struct bdbm_hlm_req_t*)bdbm_malloc_atomic
 			(sizeof (struct bdbm_hlm_req_t))) == NULL) {
@@ -87,7 +88,7 @@ static struct bdbm_hlm_req_t* __host_block_create_hlm_trim_req (
 	/* make a high-level request for TRIM */
 	hlm_req->req_type = REQTYPE_TRIM;
 	hlm_req->is_seq_lpa = bio->is_seq;
-	
+
 #if 0
 	if (dp->mapping_type == MAPPING_POLICY_SEGMENT) {
 		hlm_req->lpa = bio->slba / nr_secs_per_fp;
@@ -96,7 +97,7 @@ static struct bdbm_hlm_req_t* __host_block_create_hlm_trim_req (
 			hlm_req->len = 1;
 	} else {
 		hlm_req->lpa = (bio->slba + nr_secs_per_fp - 1) / nr_secs_per_fp;
- 
+
 		if ((hlm_req->lpa * nr_secs_per_fp - bio->slba) > bio->n_sectors) {
 			bdbm_error ("'hlm_req->lpa (%lu) * nr_secs_per_fp (%lu) - bio->slba (%lu)' (%lu) > bio->nlb (%u)",
 					hlm_req->lpa, nr_secs_per_fp, bio->slba,
@@ -108,7 +109,7 @@ static struct bdbm_hlm_req_t* __host_block_create_hlm_trim_req (
 		}
 	}
 #endif
-	hlm_req->lpa = bio->slba;
+	hlm_req->lpa = &bio->slba;
 	hlm_req->len = bio->nlb;
 	hlm_req->nr_llm_reqs = 0;
 	hlm_req->nr_done_reqs = 0;
@@ -131,16 +132,17 @@ static struct bdbm_hlm_req_t* __host_block_create_hlm_rq_req (
 	uint64_t loop = 0;
 	uint64_t slba = 0;
 	unsigned int kpg_loop = 0;
+#if 0
 	unsigned int bvec_offset = 0;
 	unsigned long nr_secs_per_fp = 0;
+#endif
 	unsigned long nr_secs_per_kp = 0;
 	unsigned int nr_kp_per_fp = 0;
 	int nprps;
 	uint64_t *prp = bio->prp;
 	/* get # of sectors per flash page */
-	nr_secs_per_fp = np->page_main_size / KERNEL_SECTOR_SIZE;
-	nr_secs_per_kp = KERNEL_PAGE_SIZE / KERNEL_SECTOR_SIZE;
-	nr_kp_per_fp = np->page_main_size / KERNEL_PAGE_SIZE;	/* e.g., 2 = 8 KB / 4 KB */
+	nr_secs_per_kp = KERNEL_PAGE_SIZE >> KERNEL_SECTOR_SZ_SHIFT;
+	nr_kp_per_fp = np->page_main_size >> KERNEL_PAGE_SHIFT;	/* e.g., 2 = 8 KB / 4 KB */
 
 	/* create bdbm_hm_req_t */
 	if ((hlm_req = (struct bdbm_hlm_req_t*)bdbm_malloc_atomic
@@ -163,13 +165,12 @@ static struct bdbm_hlm_req_t* __host_block_create_hlm_rq_req (
 		bdbm_error ("invalid request type: %d\n", bio->req_type);
 		goto fail_req;
 	}
-//	printf ("bio->req_type: %d\n", bio->req_type);
 	hlm_req->req_type = bio->req_type;
 
 	if (bio->req_type == REQTYPE_READ) {
 		hlm_req->len = bio->nlb;
 	} else {
-		hlm_req->len = bio->nlb + ((nr_kp_per_fp * (!!(bio->nlb % nr_kp_per_fp))) - (bio->nlb % nr_kp_per_fp));
+		hlm_req->len = bio->nlb + ((nr_kp_per_fp * (!!(bio->nlb & (nr_kp_per_fp-1)))) - (bio->nlb & (nr_kp_per_fp-1)));
 	}
 	/* make a high-level request for READ or WRITE */
 	//hlm_req->lpa = (bio->slba / nr_secs_per_fp);
@@ -177,14 +178,17 @@ static struct bdbm_hlm_req_t* __host_block_create_hlm_rq_req (
 	//hlm_req->len = (bio->slba + bio->n_sectors + nr_secs_per_fp - 1) / nr_secs_per_fp - hlm_req->lpa;
 	hlm_req->lpa = bdbm_malloc (sizeof(hlm_req->lpa) * hlm_req->len);
 	if (bio->is_seq) {
-		slba = (int64_t)bio->slba[0];
-		slba = slba/nr_secs_per_kp;/*TODO need to remove once after the testing without cache is done*/
+		//slba = (uint64_t)bio->slba/nr_secs_per_kp;/*TODO need to remove once after the testing without cache is done*/
+		slba = (uint64_t)bio->slba>>3;/*TODO need to remove once after the testing without cache is done*/
 		for (loop = 0; loop < bio->nlb; loop++,slba++) {
 			hlm_req->lpa[loop] = slba;
 		}
 	} else {
+		uint64_t *lpa;
+		lpa = (uint64_t *)bio->slba;
 		for (loop = 0; loop < bio->nlb; loop++) {
-			hlm_req->lpa[loop] = (int64_t)bio->slba[loop];
+			/*hlm_req->lpa[loop] = lpa[loop]/nr_secs_per_kp;*/
+			hlm_req->lpa[loop] = lpa[loop]>>3;
 		}
 	}
 	hlm_req->is_seq_lpa = bio->is_seq;
@@ -192,8 +196,6 @@ static struct bdbm_hlm_req_t* __host_block_create_hlm_rq_req (
 	hlm_req->nr_llm_reqs = 0;
 	hlm_req->ptr_host_req = (void*)bio;
 	hlm_req->ret = 0;
-	//printf ("hlm_req->lpa: %lx\n", hlm_req->lpa);
-	//printf ("hlm_req->len: %lu\n", hlm_req->len);
 /*	bdbm_spin_lock_init (&hlm_req->lock); */
 	if ((hlm_req->pptr_kpgs = (unsigned char**)bdbm_malloc_atomic
 			(sizeof(unsigned char*) * hlm_req->len)) == NULL) { 
@@ -219,14 +221,14 @@ static struct bdbm_hlm_req_t* __host_block_create_hlm_rq_req (
 		}
 #endif
 next_kpg:
- 		/* assign a new page */
+		/* assign a new page */
 		if ((hlm_req->lpa * nr_kp_per_fp + kpg_loop) != (bio->slba + bvec_offset) / nr_secs_per_kp) {
 			hlm_req->pptr_kpgs[kpg_loop] = (unsigned char*)bdbm_malloc_atomic (KERNEL_PAGE_SIZE);
 			hlm_req->kpg_flags[kpg_loop] = MEMFLAG_FRAG_PAGE;
 			kpg_loop++;
 			goto next_kpg;
 		}
-		
+
 		if ((hlm_req->pptr_kpgs[kpg_loop] = (unsigned char*) (*prp)) != NULL) {
 			hlm_req->kpg_flags[kpg_loop] = MEMFLAG_KMAP_PAGE;
 		} else {
@@ -256,7 +258,6 @@ next_kpg:
 		hlm_req->kpg_flags[kpg_loop] = MEMFLAG_FRAG_PAGE;
 		kpg_loop++;
 	}
-	//printf ("return hlm_req\n");
 	return hlm_req;
 
 fail_grab_pages:
@@ -287,11 +288,11 @@ static struct bdbm_hlm_req_t* __host_block_create_hlm_req (
 {
 	struct bdbm_hlm_req_t* hlm_req = NULL;
 	struct nand_params* np = &bdi->ptr_bdbm_params->nand;
+#if 0
 	unsigned long nr_secs_per_kp = 0;
 
 	/* get # of sectors per flash page */
-	nr_secs_per_kp = KERNEL_PAGE_SIZE / KERNEL_SECTOR_SIZE;
-#if 0
+	nr_secs_per_kp = KERNEL_PAGE_SIZE >> KERNEL_SECTOR_SZ_SHIFT;
 	/* see if some error cases */
 	if (bio->bi_sector % nr_secs_per_kp != 0) {
 		bdbm_warning ("kernel pages are not aligned with disk sectors (%lu mod %lu != 0)",
@@ -305,9 +306,8 @@ static struct bdbm_hlm_req_t* __host_block_create_hlm_req (
 		return NULL;
 	}
 
-//	printf ("call __host_block_create_hlm_rq_req\n");
 	/* create 'hlm_req' */
-		/* make a high-level request for READ or WRITE */
+	/* make a high-level request for READ or WRITE */
 	if (bio->req_type == REQTYPE_TRIM) {
 		hlm_req = __host_block_create_hlm_trim_req (bdi, bio);
 	} else {
@@ -330,13 +330,14 @@ static void __host_block_delete_hlm_req (
 	struct bdbm_drv_info* bdi, 
 	struct bdbm_hlm_req_t* hlm_req)
 {
-	struct nand_params* np = NULL;
 	unsigned int kpg_loop = 0;
+#if 0
+	struct nand_params* np = NULL;
 	unsigned int nr_kp_per_fp = 0;
 
 	np = &bdi->ptr_bdbm_params->nand;
-	nr_kp_per_fp = np->page_main_size / KERNEL_PAGE_SIZE;	/* e.g., 2 = 8 KB / 4 KB */
-
+	nr_kp_per_fp = np->page_main_size >> KERNEL_PAGE_SHIFT;	/* e.g., 2 = 8 KB / 4 KB */
+#endif
 	/* temp */
 	if (hlm_req->org_pptr_kpgs) {
 		hlm_req->pptr_kpgs = hlm_req->org_pptr_kpgs;
@@ -369,11 +370,11 @@ static void __host_block_delete_hlm_req (
 	bdbm_free_atomic (hlm_req);
 }
 
+#ifdef ENABLE_DISPLAY
 static void __host_block_display_req (
 	struct bdbm_drv_info* bdi, 
 	struct bdbm_hlm_req_t* hlm_req)
 {
-#ifdef ENABLE_DISPLAY
 	struct bdbm_ftl_inf_t* ftl = (struct bdbm_ftl_inf_t*)BDBM_GET_FTL_INF(bdi);
 	unsigned long seg_no = 0;
 
@@ -382,21 +383,21 @@ static void __host_block_display_req (
 	}
 
 	switch (hlm_req->req_type) {
-	case REQTYPE_TRIM:
-		bdbm_msg ("[%lu] TRIM\t%lu\t%lu", seg_no, hlm_req->lpa, hlm_req->len);
-		break;
-	case REQTYPE_READ:
-		/*bdbm_msg ("[%lu] READ\t%lu\t%lu", seg_no, hlm_req->lpa, hlm_req->len);*/
-		break;
-	case REQTYPE_WRITE:
-		/*bdbm_msg ("[%lu] WRITE\t%lu\t%lu", seg_no, hlm_req->lpa, hlm_req->len);*/
-		break;
-	default:
-		bdbm_error ("invalid REQTYPE (%u)", hlm_req->req_type);
-		break;
+		case REQTYPE_TRIM:
+			bdbm_msg ("[%lu] TRIM\t%lu\t%lu", seg_no, hlm_req->lpa, hlm_req->len);
+			break;
+		case REQTYPE_READ:
+			/*bdbm_msg ("[%lu] READ\t%lu\t%lu", seg_no, hlm_req->lpa, hlm_req->len);*/
+			break;
+		case REQTYPE_WRITE:
+			/*bdbm_msg ("[%lu] WRITE\t%lu\t%lu", seg_no, hlm_req->lpa, hlm_req->len);*/
+			break;
+		default:
+			bdbm_error ("invalid REQTYPE (%u)", hlm_req->req_type);
+			break;
 	}
-#endif
 }
+#endif
 #if 0
 int nvme_bio_req (struct nvme_bio *bio)
 {
@@ -411,7 +412,6 @@ int nvme_bio_req (struct nvme_bio *bio)
 	bdbm_reinit_completion (bdbm_device.make_request_lock);
 
 #endif
-//	printf ("calling host_block_make_req\n");
 	return host_block_make_req (_bdi, bio);
 
 /*	return 0;*/ /*FIXME*/
@@ -486,7 +486,7 @@ void __host_block_unregister_block_device (struct bdbm_drv_info* bdi)
 
 unsigned int host_block_open (struct bdbm_drv_info* bdi)
 {
-	unsigned int ret;
+	/*unsigned int ret;*/
 	struct bdbm_host_block_private* p;
 
 	/* create a private data structure */
@@ -514,7 +514,7 @@ unsigned int host_block_open (struct bdbm_drv_info* bdi)
 
 void host_block_close (struct bdbm_drv_info* bdi)
 {
-	unsigned long flags;
+	/*unsigned long flags;*/
 	struct bdbm_host_block_private* p = NULL;
 
 	p = (struct bdbm_host_block_private*)BDBM_HOST_PRIV(bdi);
@@ -539,7 +539,6 @@ void host_block_close (struct bdbm_drv_info* bdi)
 
 	/* free private */
 	bdbm_free_atomic (p);
-//	printf ("host_block_close\n");
 }
 
 int host_block_allow_gc (struct bdbm_drv_info* bdi)
@@ -558,7 +557,7 @@ int host_block_allow_gc (struct bdbm_drv_info* bdi)
 
 int host_block_make_req (struct bdbm_drv_info* bdi, struct nvme_bio *bio)
 {
-	unsigned long flags;
+	/*unsigned long flags;*/
 	struct nand_params* np = NULL;
 	struct bdbm_hlm_req_t* hlm_req = NULL;
 	struct bdbm_host_block_private* p = NULL;
@@ -566,7 +565,7 @@ int host_block_make_req (struct bdbm_drv_info* bdi, struct nvme_bio *bio)
 	np = &bdi->ptr_bdbm_params->nand;
 	if (!np) {
 		printf ("!np\n");
-		return;
+		return -1;
 	}
 	p = (struct bdbm_host_block_private*)BDBM_HOST_PRIV(bdi);
 #if 0
@@ -587,7 +586,9 @@ int host_block_make_req (struct bdbm_drv_info* bdi, struct nvme_bio *bio)
 	}
 
 	/* display req info */
+#ifdef ENABLE_DISPLAY
 	__host_block_display_req (bdi, hlm_req);
+#endif
 #if 0
 	/* if success, increase # of host reqs */
 	bdbm_spin_lock_irqsave (&p->lock, flags);
@@ -601,17 +602,18 @@ int host_block_make_req (struct bdbm_drv_info* bdi, struct nvme_bio *bio)
 	/* NOTE: it would be possible that 'hlm_req' becomes NULL 
 	 * if 'bdi->ptr_hlm_inf->make_req' is success. */
 	if (bdi->ptr_hlm_inf->make_req (bdi, hlm_req) != 0) {
+		printf("bio %p %d %p %ld", bio, bio->is_seq, bio->nlb, bio->req_info, bio->slba);
 		bdbm_error ("'bdi->ptr_hlm_inf->make_req' failed");
 #if 0
 		/* decreate # of reqs */
 		bdbm_spin_lock_irqsave (&p->lock, flags);
 #endif
-	pthread_spin_lock (&p->lock);
+		pthread_spin_lock (&p->lock);
 		if (p->nr_host_reqs > 0)
 			p->nr_host_reqs--;
 		else
 			bdbm_error ("p->nr_host_reqs is 0");
-	pthread_spin_unlock (&p->lock);
+		pthread_spin_unlock (&p->lock);
 #if 0
 		bdbm_spin_unlock_irqrestore (&p->lock, flags);
 #endif
@@ -626,22 +628,22 @@ int host_block_make_req (struct bdbm_drv_info* bdi, struct nvme_bio *bio)
 void host_block_end_req (struct bdbm_drv_info* bdi, struct bdbm_hlm_req_t* hlm_req)
 {
 	unsigned int ret;
-	unsigned long flags;
+	/*unsigned long flags;*/
 	struct nvme_bio *bio = NULL;
 	struct bdbm_host_block_private* p = NULL;
-	NvmeRequest *req = NULL;
+	/*NvmeRequest *req = NULL;*/
 
 
 	/* get a bio from hlm_req */
 	bio = (struct nvme_bio*)(hlm_req->ptr_host_req);
 	p = (struct bdbm_host_block_private*)BDBM_HOST_PRIV(bdi);
 	ret = hlm_req->ret;
-	req = (NvmeRequest*)(bio->req_info);
+	/*req = (NvmeRequest*)(bio->req_info);*/
 
 	/* destroy hlm_req */
 	__host_block_delete_hlm_req (bdi, hlm_req);
 	if(bio->req_type != REQTYPE_TRIM){
-		nvme_rw_cb(req, ret);
+		nvme_bio_cb(bio, ret);
 	}
 #if 0
 	/* get the result and end a bio */
@@ -654,7 +656,6 @@ void host_block_end_req (struct bdbm_drv_info* bdi, struct bdbm_hlm_req_t* hlm_r
 #endif
 	/* decreate # of reqs */
 /*	bdbm_spin_lock_irqsave (&p->lock, flags);*/
-	//printf("No HR: %lu\n",p->nr_host_reqs);
 	pthread_spin_lock (&p->lock);
 	if (p->nr_host_reqs > 0)
 		p->nr_host_reqs--;

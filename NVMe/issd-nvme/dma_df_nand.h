@@ -12,16 +12,16 @@
 #define NAND_TABLE_OFFSET		0x200
 #define NAND_TBL_SZ_SHIFT		0x1
 #define NAND_TABLE_COUNT		8
-#define NAND_DESC_PER_TABLE		32
-#define NAND_DESC_SIZE			8
+#define NAND_DESC_PER_TABLE		16
+#define NAND_DESC_PER_TABLE_DUP 32
+#define NAND_DESC_SIZE			0x40
 #define TOTAL_NAND_DESCRIPTORS 	(NAND_TABLE_COUNT*NAND_DESC_PER_TABLE)
 
 #define CMD_STRUCT_SIZE 	48
 enum nand_cmd_ctrl_bits {
-	SET_NO_PROG                 = 1,
 	DISABLE_ECC                 = 1,
 	SET_NO_DATA					= 1,
-	SET_LOAD_BIT				= 1,
+	SET_MUL_PLN_CMD				= 1,
 };
 
 enum nand_cmds_dma_mgr {
@@ -69,13 +69,14 @@ typedef enum REQ_FLAGS {
 	DF_BIT_DATA_IO      = BVAL ( 5),
 	DF_BIT_IS_OOB       = BVAL ( 6),
 	DF_BIT_IS_PAGE      = BVAL ( 7),
-	DF_BIT_PAGE_END		= BVAL ( 8),
+	DF_BIT_CMD_END		= BVAL ( 8),
 	DF_BIT_GC_OP        = BVAL ( 9),
 	DF_BIT_STATUS_OP    = BVAL (10),
 	DF_BIT_SCAN_BB		= BVAL (11),
 	DF_BIT_RESET_OP     = BVAL (12),
 	DF_BIT_SEM_USED     = BVAL (13),
 	DF_BIT_CONFIG_IO    = BVAL (14),
+	DF_BIT_SETFEAT_OP   = BVAL (15),
 
 	/* combos come now */
 	DF_BITS_MGMT_OOB    = BVAL ( 4) | BVAL ( 6),
@@ -86,14 +87,6 @@ typedef enum REQ_FLAGS {
 }REQ_FLAGS_T;
 
 
-#define df_setup_nand_wr_desc(req_ptr, phy_addr, page_off, host_addr, len, flag) \
-		df_setup_nand_desc(req_ptr, phy_addr, page_off, host_addr, len, flag|DF_BIT_WRITE_OP)
-		 
-#define df_setup_nand_rd_desc(req_ptr, phy_addr, page_off, host_addr, len, flag) \
-		df_setup_nand_desc(req_ptr, phy_addr, page_off, host_addr, len, flag|DF_BIT_READ_OP) 
-
-#define df_setup_nand_erase_desc(req_ptr, phy_addr, page_off, host_addr, len, flag) \
-		df_setup_nand_desc(req_ptr, phy_addr, page_off, host_addr, len, flag|DF_BIT_ERASE_OP) 
 #if 0
 typedef struct nand_cmd_struct {
 	uint32_t row_addr;
@@ -112,27 +105,37 @@ typedef struct nand_cmd_struct {
 #endif
 typedef struct nand_descriptor {
 	uint32_t row_addr;
-	uint32_t column_addr;
-	uint32_t data_buff_LSB;
-	uint32_t data_buff_MSB;
-	uint32_t buffer_id:16;
-	uint32_t channel_id:16;
-	uint32_t target:3;
-	uint32_t rsvd1:13;
-	uint32_t length:16;
-	uint32_t dir:1;
-	uint32_t no_data:1;
-	uint32_t no_prog:1;
-	uint32_t ecc:1;
-	uint32_t command:6;
-	uint32_t desc_load:1;
-	uint32_t rsvd2:21;
-	uint32_t irq_en:1;
-	uint32_t hold:1;
-	uint32_t dma_cmp:1;
-	uint32_t desc_id:8;
-	uint32_t OwnedByfpga:1;
-	uint32_t rsvd3:20;
+	uint32_t column_addr	:29;
+	uint32_t target			:3;
+	uint32_t data_buff_1_LSB;
+	uint32_t data_buff_1_MSB;
+	uint32_t data_buff_2_LSB;
+	uint32_t data_buff_2_MSB;
+	uint32_t data_buff_3_LSB;
+	uint32_t data_buff_3_MSB;
+	uint32_t data_buff_4_LSB;
+	uint32_t data_buff_4_MSB;
+	uint32_t data_len_1		:16;
+	uint32_t data_len_2		:16;
+	uint32_t data_len_3		:16;
+	uint32_t data_len_4		:16;
+	uint32_t oob_data_LSB;
+	uint32_t oob_data_MSB	:20;
+	uint32_t oob_data_len	:12;	
+	uint32_t buffer_id		:16;
+	uint32_t channel_id		:16;
+	uint32_t dir			:1;
+	uint32_t no_data		:1;
+	uint32_t no_ecc			:1;
+	uint32_t command		:6;
+	uint32_t irq_en			:1;
+	uint32_t hold			:1;
+	uint32_t dma_cmp		:1;
+	uint32_t desc_id		:8;
+	uint32_t OwnedByfpga	:1;
+	uint32_t chk_Rdy_Bsy	:1;
+	uint32_t is_Mul_pln		:1;
+	uint32_t rsvd1			:9;
 } __attribute__((packed)) nand_descriptor_t;
 
 typedef struct Nand_DescStatus {
@@ -141,30 +144,37 @@ typedef struct Nand_DescStatus {
 	void            *req_ptr;
 	uint8_t         *phy_oob;
 	uint8_t         *virt_oob;
-	uint64_t 		cmdbuf_phy_addr;
+	uint8_t 		*phy_MPge;
+	uint8_t 		*virt_MPge;
 	uint64_t		cmdbuf_virt_addr;
 
 	pthread_mutex_t available;
 	volatile uint8_t valid;
+	uint16_t		index;
+	uint16_t		chip;
 } DescStat;
 
 typedef struct nand_csf_reg {
-	uint8_t     irq_en:1;
-	uint8_t     hold:1;
-	uint8_t     dma_cmp:1;
-	uint16_t    desc_id:8;
-	uint8_t     OwnedByFpga:1;
-	uint32_t    rsvd:20;
+	uint8_t dir				:1;
+	uint8_t no_data			:1;
+	uint8_t no_ecc			:1;
+	uint8_t cmd				:6;
+	uint8_t irq_en			:1;
+	uint8_t hold			:1;
+	uint8_t dma_cmp			:1;
+	uint16_t desc_id		:8;
+	uint8_t OwnedByFpga		:1;
+	uint32_t rsvd			:11;
 } __attribute__((packed)) nand_csf;
 
 
 typedef struct nand_csr_reg {
 	uint8_t     desc_id;
-	uint8_t     err_code:3;
-	uint8_t     start:1;
-	uint8_t     loop:1;
-	uint8_t     reset:1;
-	uint32_t    rsvd:18;
+	uint8_t     err_code	:3;
+	uint8_t     start		:1;
+	uint8_t     loop		:1;
+	uint8_t     reset		:1;
+	uint32_t    rsvd		:18;
 } nand_csr_reg;
 
 typedef struct Nand_DmaRegs {
@@ -184,17 +194,5 @@ typedef struct Desc_Track {
 	uint8_t	    is_used;
 } Desc_Track;
 
-/**
- * @Func    	: df_setup_nand_desc
- * @Brief   	: Create command buffer based on the input's given by the 
- * 			  	  DM layer which will be used in the DMA descriptors.
- *  @input  	: req_ptr 	- host request pointer.
- *  			  phy_addr 	- Physical address of the DF card.
- *  			  host_addr	- Host address.
- *  			  len 		- Length of the data transaction.
- *  			  req_flag 	- Flags giving the attributes of the desc.
- *  @return     : Return zero on success and non zero on failure.
- */
-uint32_t df_setup_nand_desc (void *req_ptr, struct bdbm_phyaddr_t *phy_addr, uint32_t col_addr, uint8_t *host_addr, uint32_t len, uint32_t req_flag);
 
 #endif /*__DMA_DF_NAND_H*/

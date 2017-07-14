@@ -30,6 +30,7 @@ THE SOFTWARE.
 #include <fcntl.h>           /* For O_* constants */
 #include <sys/stat.h>        /* For mode constants */
 #include <semaphore.h>
+#include <unistd.h>
 
 #include "../bdbm_drv.h"
 #include "../params.h"
@@ -37,8 +38,8 @@ THE SOFTWARE.
 #include <pthread.h>
 #include <sched.h>
 /*
-#include "utils/time.h"
-#include "/utils/file.h"
+  #include "utils/time.h"
+  #include "/utils/file.h"
 */
 #include "abm.h"
 #include "page_ftl.h"
@@ -46,32 +47,37 @@ THE SOFTWARE.
 #include <syslog.h>
 
 pthread_mutex_t gc_lock; 
-extern unsigned long long int gc_phy_addr[70];
+extern unsigned long long int gc_phy_addr[80];
 extern atomic_t act_desc_cnt;
 extern uint8_t* ls2_virt_addr[5];
 extern uint8_t ftl_initialised,ftl_stored;
 /* FTL interface */
 struct bdbm_ftl_inf_t _ftl_page_ftl = {
-	.ptr_private = NULL,
-	.create = bdbm_page_ftl_create,
-	.destroy = bdbm_page_ftl_destroy,
-	.get_free_ppa = bdbm_page_ftl_get_free_ppa,
-	.get_ppa = bdbm_page_ftl_get_ppa,
-	.map_lpa_to_ppa = bdbm_page_ftl_map_lpa_to_ppa,
-	.invalidate_lpa = bdbm_page_ftl_invalidate_lpa,
+.ptr_private = NULL,
+	 .create = bdbm_page_ftl_create,
+	 .destroy = bdbm_page_ftl_destroy,
+	 .get_free_ppa = bdbm_page_ftl_get_free_ppa,
+	 .get_ppa = bdbm_page_ftl_get_ppa,
+	 .map_lpa_to_ppa = bdbm_page_ftl_map_lpa_to_ppa,
+	 .invalidate_lpa = bdbm_page_ftl_invalidate_lpa,
 #if GC_THREAD_ENABLED
-	.do_gc = bdbm_page_ftl_signal_gc,
+	 .do_gc = bdbm_page_ftl_signal_gc,
 #else
-	.do_gc = bdbm_page_ftl_do_gc,
+	 .do_gc = bdbm_page_ftl_do_gc,
 #endif
-	.is_gc_needed = bdbm_page_ftl_is_gc_needed,
-	.scan_badblocks = bdbm_page_badblock_scan,
-	.load = bdbm_page_ftl_load,
-	.store = bdbm_page_ftl_store,
-	.get_segno = NULL,
-};
+	 .is_gc_needed = bdbm_page_ftl_is_gc_needed,
+	 .scan_badblocks = bdbm_page_badblock_scan,
+	 .load = bdbm_page_ftl_load,
+	 .store = bdbm_page_ftl_store,
+	 .get_segno = NULL,
+	 };
 
 void *gc_thread (void *arg);
+//bv_chg
+/*
+  void *tar_extract_thread();
+  pthread_t tar_ext_thr;
+*/
 
 /* data structures for block-level FTL */
 enum BDBM_PFTL_PAGE_STATUS {
@@ -374,7 +380,7 @@ void bdbm_page_ftl_destroy (struct bdbm_drv_info* bdi)
 {
 	struct bdbm_page_ftl_private* p = _ftl_page_ftl.ptr_private;
 	struct nand_params* np = BDBM_GET_NAND_PARAMS (bdi);
-	uint64_t nr_kp_per_fp = np->page_main_size / KERNEL_PAGE_SIZE;	/* e.g., 2 = 8 KB / 4 KB */
+	/*uint64_t nr_kp_per_fp = np->page_main_size / KERNEL_PAGE_SIZE;*/	/* e.g., 2 = 8 KB / 4 KB */
 	uint64_t i = 0, j = 0;
 
 	if (!p)
@@ -482,7 +488,6 @@ uint32_t bdbm_page_ftl_get_free_ppa (struct bdbm_drv_info* bdi, uint64_t *lpa, s
 		/*bdbm_msg ("curr_puid = %lu", p->curr_puid);*/
 		p->curr_puid++;
 	}
-	//printf("Total:%lu Free:%lu Free_pre:%lu Clean:%lu Dirty:%lu Bad:%lu\n",p->bai->nr_total_blks,p->bai->nr_free_blks,p->bai->nr_free_blks_prepared,p->bai->nr_clean_blks,p->bai->nr_dirty_blks,p->bai->nr_bad_blks);
 
 	return 0;
 }
@@ -510,7 +515,7 @@ uint32_t bdbm_page_ftl_map_lpa_to_ppa (struct bdbm_drv_info* bdi, uint64_t *lpa,
 		}
 
 		if (lpa[k] >= np->nr_subpages_per_ssd) {
-			bdbm_error ("LPA is beyond logical space (%llX)", lpa[k]);
+			bdbm_error ("LPA is beyond logical space (%lX)", lpa[k]);
 			return 1;
 		}
 
@@ -712,18 +717,20 @@ uint32_t bdbm_page_ftl_signal_gc (struct bdbm_drv_info* bdi)
 {
     struct bdbm_page_ftl_private* p = _ftl_page_ftl.ptr_private;
     sem_post (&p->gc_sem);
+    return 0;
 }
 #endif
 
 #if GC_THREAD_ENABLED
 void *gc_thread (void *arg)
 {
+	printf("\tgc_thread\n");
 	struct bdbm_page_ftl_private* p = _ftl_page_ftl.ptr_private;
 	struct bdbm_drv_info* bdi = (struct bdbm_drv_info *)arg;
 	cpu_set_t cpuset;
 	int ret_val;
 	CPU_ZERO (&cpuset);
-	CPU_SET (3 , &cpuset);
+	CPU_SET (5 , &cpuset);
 	ret_val = pthread_setaffinity_np (pthread_self (),sizeof (cpu_set_t),&cpuset);
 	if (ret_val != 0) {
 		perror ("pthread_setset_thread_affinity_np");
@@ -749,7 +756,9 @@ static void hlm_reqs_write_compaction (
 		nand_params_t* np)
 {
 	uint64_t dst_loop = 0, dst_kp = 0, src_kp = 0, i = 0;
+	uint64_t dst_kp_per_fp = 0, src_kp_per_fp = 0;
 	uint64_t nr_punits = np->nr_chips_per_channel * np->nr_channels;
+	int64_t *dst_ptr_oob, *src_ptr_oob;
 
 	struct bdbm_llm_req_t* dst_r = NULL;
 	struct bdbm_llm_req_t* src_r = NULL;
@@ -761,13 +770,18 @@ static void hlm_reqs_write_compaction (
 	dst->nr_reqs = 1;
 	for (i = 0; i < nr_punits * np->nr_pages_per_block; i++) {
 		src_r = src->llm_reqs[i];
-
-		for (src_kp = 0; src_kp < np->nr_subpages_per_page; src_kp++) {
+		src_kp_per_fp = 0;
+		for (src_kp = 0; src_kp < np->nr_subpages_per_page; src_kp++, src_kp_per_fp = src_kp% 4) {
 			if (src_r->kpg_flags[src_kp] == MEMFLAG_KMAP_PAGE) {
 				/* if src has data, copy it to dst */
 				dst_r->kpg_flags[dst_kp] = src_r->kpg_flags[src_kp];
 				dst_r->pptr_kpgs[dst_kp] = src_r->pptr_kpgs[src_kp];
-				((int64_t*)dst_r->ptr_oob)[dst_kp] = ((int64_t*)src_r->ptr_oob)[src_kp];
+				dst_ptr_oob = dst_kp < 4 ? ((int64_t*)dst_r->ptr_oob) : \
+							  ((int64_t*)(dst_r->ptr_oob + (np->page_oob_size/2)));
+				src_ptr_oob = src_kp < 4 ? ((int64_t*)src_r->ptr_oob) : \
+							  ((int64_t*)(src_r->ptr_oob + (np->page_oob_size/2)));
+				dst_ptr_oob[dst_kp_per_fp] = src_ptr_oob [src_kp_per_fp];
+				//((int64_t*)dst_r->ptr_oob)[dst_kp] = ((int64_t*)src_r->ptr_oob)[src_kp];
 			} else {
 				/* otherwise, skip it */
 				continue;
@@ -775,6 +789,7 @@ static void hlm_reqs_write_compaction (
 
 			/* goto the next llm if all kps are full */
 			dst_kp++;
+			dst_kp_per_fp = dst_kp % 4;
 			if (dst_kp == np->nr_subpages_per_page) {
 				dst_kp = 0;
 				dst_loop++;
@@ -904,13 +919,21 @@ uint32_t bdbm_page_ftl_do_gc (struct bdbm_drv_info* bdi)
 		for (k = 0; k < np->nr_subpages_per_page; k++) {
 			/* move subpages that contain new data */
 			if (r->kpg_flags[k] == MEMFLAG_KMAP_PAGE) {
-				r->lpa[k] = ((uint64_t*)r->ptr_oob)[k];
+				if (k < 4) {
+					r->lpa[k] = ((uint64_t*)r->ptr_oob)[k];
+				} else {
+					r->lpa[k] = ((uint64_t*)(r->ptr_oob + (np->page_oob_size/2)))[k % 4];
+				}
 			} else if (r->kpg_flags[k] == MEMFLAG_FRAG_PAGE) {
-				((uint64_t*)r->ptr_oob)[k] = -1;
+				if (k < 4) {
+					((uint64_t*)r->ptr_oob)[k] = -1;
+				} else {
+					((uint64_t*)(r->ptr_oob + (np->page_oob_size/2)))[k % 4] = -1;
+				}
 				r->lpa[k] = -1;
 			} else {
 				bdbm_bug_on (1);
-			}
+			}	
 		}
 		r->ptr_hlm_req = (void*)hlm_gc_w;
 		r->phyaddr = &r->phyaddr_w;
@@ -1032,15 +1055,36 @@ uint32_t bdbm_page_ftl_load (struct bdbm_drv_info* bdi, const char* fn)
 		uint64_t i;
 		ret = bdi->ptr_dm_inf->load(bdi, (void*)p->ptr_mapping_table, (void*)p->bai);
 		/* step1: load abm */
-        if (system (" ls /run/ftl_pmt/metaData.tar.gz &> /dev/null")){
-            goto get_act_blks;
-        }
+		syslog(LOG_INFO,"bdbm load thread...");
+//bv_chg
+#if 0
+		if (system (" ls /run/ftl_pmt/metaData.tar.gz &> /dev/null")){
+			goto get_act_blks;
+		}
+		syslog(LOG_INFO,"system-cp");
 		system ("cp /run/ftl_pmt/metaData.tar.gz /run/ &> /dev/null");
-        ret = system ("tar -xvzf /run/metaData.tar.gz -C /run/ &> /dev/null");
-        if(ret) {
-            bdbm_error ("PMT TAR Extraction Failed %u\n", ret);
-        }
-
+		syslog(LOG_INFO,"system-tar");
+		ret = system ("tar -xvzf /run/metaData.tar.gz -C /run/ &> /dev/null");
+		if(ret) {
+			bdbm_error ("PMT TAR Extraction Failed %u\n", ret);
+		}
+		syslog(LOG_INFO,"system-done");
+#else
+//check file present?
+		ret = access("/run/ftl_pmt/metaData.tar.gz",F_OK);
+		if(ret != 0) {
+			syslog(LOG_INFO,"/run/ftl_pmt/metaData.tar.gz file not present...");
+			goto get_act_blks;
+		}
+		syslog(LOG_INFO,"/run/ftl_pmt/metaData.tar.gz file present");
+/*
+//create thread
+pthread_create(&tar_ext_thr,NULL,tar_extract_thread,NULL);
+syslog(LOG_INFO,"Tar extract Thread created...");
+pthread_join(tar_ext_thr,NULL);
+syslog(LOG_INFO,"Tar extract Thread completed...");
+*/	
+#endif
 		if (bdbm_abm_load (p->bai, "/run/abm.dat") != 0) {
 			//bdbm_error ("bdbm_abm_load failed");
 			syslog (LOG_INFO,"Failed to load abm\n");
@@ -1060,9 +1104,9 @@ uint32_t bdbm_page_ftl_load (struct bdbm_drv_info* bdi, const char* fn)
 			//pos += bdbm_fread (fp, pos, (uint8_t*)&me[i], sizeof (struct bdbm_page_mapping_entry));
 			fread((uint8_t*)&me[i], 1, sizeof (struct bdbm_page_mapping_entry), fp);
 			if (me[i].status != PFTL_PAGE_NOT_ALLOCATED &&
-					me[i].status != PFTL_PAGE_VALID &&
-					me[i].status != PFTL_PAGE_INVALID &&
-					me[i].status != PFTL_PAGE_INVALID_ADDR) {
+			    me[i].status != PFTL_PAGE_VALID &&
+			    me[i].status != PFTL_PAGE_INVALID &&
+			    me[i].status != PFTL_PAGE_INVALID_ADDR) {
 				bdbm_msg ("snapshot: invalid status = %u", me[i].status);
 			}
 		}
@@ -1097,80 +1141,90 @@ uint32_t bdbm_page_ftl_store (struct bdbm_drv_info* bdi, const char* fn)
 	uint32_t ret;
 	uint8_t store_to_nand = 0;
 #ifdef MGMT_DATA_ON_NAND
-	uint8_t store_to_nand = 1;
+		uint8_t store_to_nand = 1;
 #endif
-	/* step1: make active blocks invalid (it's ugly!!!) */
-	//if ((fp = bdbm_fopen (fn, O_CREAT | O_WRONLY, 0777)) == NULL) {
-	if ((np->device_type != DEVICE_TYPE_DRAGON_FIRE) || (!store_to_nand)) {
-		if ((fp = fopen(fn,"w")) == NULL) {
-			bdbm_error ("bdbm_fopen failed");
-			return 1;
-		}
-	}
-
-	while (1) {
-		/* get the channel & chip numbers */
-		i = p->curr_puid % np->nr_channels;
-		j = p->curr_puid / np->nr_channels;
-
-		/* get the physical offset of the active blocks */
-		b = p->ac_bab[i*np->nr_chips_per_channel + j];
-
-		/* invalidate remaining pages */
-		for (k=0; k<np->nr_subpages_per_page; k++) {
-			bdbm_abm_invalidate_page (p->bai, 
-					b->channel_no, b->chip_no, b->block_no, p->curr_page_ofs, k);
-		}
-		bdbm_bug_on (b->channel_no != i);
-		bdbm_bug_on (b->chip_no != j);
-
-		/* go to the next parallel unit */
-		if ((p->curr_puid + 1) == p->nr_punits) {
-			p->curr_puid = 0;
-			p->curr_page_ofs++;	/* go to the next page */
-
-			/* see if there are sufficient free pages or not */
-			if (p->curr_page_ofs == np->nr_pages_per_block) {
-				p->curr_page_ofs = 0;
-				break;
+		/* step1: make active blocks invalid (it's ugly!!!) */
+		//if ((fp = bdbm_fopen (fn, O_CREAT | O_WRONLY, 0777)) == NULL) {
+		if ((np->device_type != DEVICE_TYPE_DRAGON_FIRE) || (!store_to_nand)) {
+			if ((fp = fopen(fn,"w")) == NULL) {
+				bdbm_error ("bdbm_fopen failed");
+				return 1;
 			}
+		}
+
+		while (1) {
+			/* get the channel & chip numbers */
+			i = p->curr_puid % np->nr_channels;
+			j = p->curr_puid / np->nr_channels;
+
+			/* get the physical offset of the active blocks */
+			b = p->ac_bab[i*np->nr_chips_per_channel + j];
+
+			/* invalidate remaining pages */
+			for (k=0; k<np->nr_subpages_per_page; k++) {
+				bdbm_abm_invalidate_page (p->bai, 
+							  b->channel_no, b->chip_no, b->block_no, p->curr_page_ofs, k);
+			}
+			bdbm_bug_on (b->channel_no != i);
+			bdbm_bug_on (b->chip_no != j);
+
+			/* go to the next parallel unit */
+			if ((p->curr_puid + 1) == p->nr_punits) {
+				p->curr_puid = 0;
+				p->curr_page_ofs++;	/* go to the next page */
+
+				/* see if there are sufficient free pages or not */
+				if (p->curr_page_ofs == np->nr_pages_per_block) {
+					p->curr_page_ofs = 0;
+					break;
+				}
+			} else {
+				p->curr_puid++;
+			}
+		}
+
+		if (np->device_type == DEVICE_TYPE_DRAGON_FIRE && store_to_nand) {
+			ret = bdi->ptr_dm_inf->store(bdi);
 		} else {
-			p->curr_puid++;
+			ret = bdi->ptr_dm_inf->store(bdi);
+			/* step2: store mapping table */
+			me = p->ptr_mapping_table;
+			syslog(LOG_INFO,"Writing to ftl.dat.............\n");
+			for (i = 0; i < np->nr_subpages_per_ssd; i++) {
+				//pos += bdbm_fwrite (fp, pos, (uint8_t*)&me[i], sizeof (struct bdbm_page_mapping_entry));
+				fwrite((uint8_t*)&me[i], 1, sizeof (struct bdbm_page_mapping_entry), fp);
+			}
+			//bdbm_fsync (fp);
+			//bdbm_fclose (fp);
+			fclose(fp);
+
+			/* step3: store abm */
+			ret = bdbm_abm_store (p->bai, "/run/abm.dat");
+			syslog(LOG_INFO, ".dat write completed, Tar creation...");
+#if 0		
+			ret = system("sh ./tar_n_cpy");
+			if(ret) {
+				bdbm_error ("Making TAR failed %u\n", ret);
+			}
+			syslog(LOG_INFO, "Tar completed");
+
+
+			ret = system ("cd /run && tar -cvzf /run/metaData.tar.gz ftl.dat abm.dat ");
+			if(ret) {
+				bdbm_error ("Making TAR failed %u\n", ret);
+			}
+
+			system ("cp /run/metaData.tar.gz /run/ftl_pmt/");
+			system ("sync");
+			system ("umount /dev/mmcblk0p1");
+			system ("rm /run/metaData.tar.gz");
+			system ("rm /run/ftl.dat");
+			system ("rm /run/abm.dat");
+			system ("sync");
+#endif
 		}
+		return ret;
 	}
-
-	if (np->device_type == DEVICE_TYPE_DRAGON_FIRE && store_to_nand) {
-		ret = bdi->ptr_dm_inf->store(bdi);
-	} else {
-		ret = bdi->ptr_dm_inf->store(bdi);
-		/* step2: store mapping table */
-		me = p->ptr_mapping_table;
-		syslog(LOG_INFO,"Writing to ftl.dat.............\n");
-		for (i = 0; i < np->nr_subpages_per_ssd; i++) {
-			//pos += bdbm_fwrite (fp, pos, (uint8_t*)&me[i], sizeof (struct bdbm_page_mapping_entry));
-			fwrite((uint8_t*)&me[i], 1, sizeof (struct bdbm_page_mapping_entry), fp);
-		}
-		//bdbm_fsync (fp);
-		//bdbm_fclose (fp);
-		fclose(fp);
-
-		/* step3: store abm */
-		ret = bdbm_abm_store (p->bai, "/run/abm.dat");
-        ret = system ("cd /run && tar -cvzf /run/metaData.tar.gz ftl.dat abm.dat &> /dev/null");
-        if(ret) {
-            bdbm_error ("Making TAR failed %u\n", ret);
-        }
-
-		system ("cp /run/metaData.tar.gz /run/ftl_pmt/");
-		system ("sync");
-		system ("umount /dev/mmcblk0p1");
-		system ("rm /run/metaData.tar.gz");
-	    system ("rm /run/ftl.dat");
-		system ("rm /run/abm.dat");
-		system ("sync");
-	}
-	return ret;
-}
 
 void __bdbm_page_badblock_scan_eraseblks (
 	struct bdbm_drv_info* bdi,
@@ -1308,3 +1362,18 @@ uint64_t bdbm_hidden_blk_cnt (struct bdbm_drv_info* _bdi)
 	p = (struct bdbm_page_ftl_private*)(_bdi->ptr_ftl_inf->ptr_private);
 	return (p->bai->nr_bad_blks + p->bai->nr_mgmt_blks);
 }
+/*
+  void *tar_extract_thread()
+  {
+  int ret = 0;
+  syslog(LOG_INFO,"system-cp");
+  system ("cp /run/ftl_pmt/metaData.tar.gz /run/ &> /dev/null");
+  syslog(LOG_INFO,"system-tar");
+  ret = system ("tar -xvzf /run/metaData.tar.gz -C /run/ &> /dev/null");
+  if(ret) {
+  bdbm_error ("PMT TAR Extraction Failed %u\n", ret);
+  }
+  syslog(LOG_INFO,"thread-done");
+
+  }
+*/
