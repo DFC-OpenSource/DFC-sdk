@@ -18,7 +18,7 @@ Performance:
 ------------
 
 Read NAND speed         => 82 MBps
-Write NAND speed        => 76 MBps
+Write NAND speed        => 79 MBps
 
 
 FPGA image version  => 03.01.00
