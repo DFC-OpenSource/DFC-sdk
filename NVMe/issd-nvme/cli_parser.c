@@ -1334,7 +1334,6 @@ pthread_t cli_tid;
 
 void *cli(void *arg) 
 {
-	printf("\tcli\n");
 	void *ret = NULL;
 
 	set_thread_affinity (3, pthread_self ());

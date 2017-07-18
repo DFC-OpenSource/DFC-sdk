@@ -17,7 +17,7 @@ SRCS=*.c
 FTL= bdbm_ftl/params.c  bdbm_ftl/platform.c bdbm_ftl/ioctl.c bdbm_ftl/kmain.c bdbm_ftl/hlm_nobuf.c bdbm_ftl/host_block.c bdbm_ftl/llm_noq.c bdbm_ftl/dm_dragonfire.c bdbm_ftl/dev_dragonfire.c bdbm_ftl/ftl/abm.c bdbm_ftl/ftl/page_ftl.c
 #CC = gcc -g -Wno-packed-bitfield-compat
 ##Cross compilation command for EAR5/EAR6
-CC=/home/vchn178/Work/download/fslu_nvme_ls2088sdkv3/LS2088A-SDK-20161223-yocto/build_ls2088aissd/tmp/sysroots/x86_64-linux/usr/bin/aarch64-fsl-linux/aarch64-fsl-linux-gcc --sysroot=/home/vchn178/Work/download/fslu_nvme_ls2088sdkv3/LS2088A-SDK-20161223-yocto/build_ls2088aissd/tmp/sysroots/ls2088aissd
+CC= /home/vchn181/SDK/ls88/fslu_nvme_ls2088sdkv3/LS2088A-SDK-20161223-yocto/build_ls2088aissd/tmp/sysroots/x86_64-linux/usr/bin/aarch64-fsl-linux/aarch64-fsl-linux-gcc --sysroot=/home/vchn181/SDK/ls88/fslu_nvme_ls2088sdkv3/LS2088A-SDK-20161223-yocto/build_ls2088aissd/tmp/sysroots/ls2088aissd
 help_str="\nUsage: make <setup>"\
 		 "\n\tfslustdalone: standalone setup - ls2 NVMe host & controller- DDR Namespace"\
 		 "\n\tfsluissd: target setup - x86 host & ls2 NVMe - Two Namespaces - DDR & NAND"\

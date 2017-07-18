@@ -152,12 +152,12 @@ void display()
 	int i = 0;
 	int c = qdma->consumer_index;
 
-	printf("disp: count: %d\n",qdma->des_io_table[c].count);
+//	printf("disp: count: %d\n",qdma->des_io_table[c].count);
 	for(i = 0;i < qdma->des_io_table[c].count;i++) {
-		printf("src: %lx, dest: %lx, len: %x, status: %d\n", 
+/*		printf("src: %lx, dest: %lx, len: %x, status: %d\n", 
 				qdma->des_io_table[c].q_desc[i]->src_addr,qdma->des_io_table[c].q_desc[i]->dest_addr, 
 				qdma->des_io_table[c].q_desc[i]->len,qdma->des_io_table[c].q_desc[i]->status);
-
+*/
 	}
 
 }
