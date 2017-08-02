@@ -149,9 +149,9 @@ MODULE_DESCRIPTION("Freescale DPAA2 Ethernet Driver");
 #define BP_PULL_DONE 0x2
 #define BP_PULL_CLEAR 0x3
 //#endif
-#define PEX_OFFSET 0x1400000000
+#define PEX_OFFSET 0x3000000000
 #define DPBP_TIMEOUT     600 /* 10 Min */
-#define NUM_NET_DEV 2
+#define NUM_NET_DEV 4
 static struct of_device_id nic_of_genirq_match[] = {
 	{ .compatible = "arm,gic-v3", },
 	{ },
@@ -397,7 +397,7 @@ static void dpaa2_eth_rx(struct dpaa2_eth_priv *priv,
 		priv->rx_count =0;
 	}
 
-	addr=(((uint64_t)dpaa2_fd_get_addr(fd))-(0x1400000000));
+	addr=(((uint64_t)dpaa2_fd_get_addr(fd))-(PEX_OFFSET));
 	addr |=addr>>32;
 
 	len_offset_flag=((uint32_t)dpaa2_fd_get_len(fd)<<16);
@@ -1153,7 +1153,7 @@ static int nic_tx_napi(struct napi_struct *napi, int budget)
 		}
 #endif
 		addr_binfo = ((uint64_t)addr_binfo & 0xffffffffffffffc0);
-		dpaa2_fd_set_addr(&fd,(dma_addr_t)((addr_binfo) + 0x1400000000));
+		dpaa2_fd_set_addr(&fd,(dma_addr_t)((addr_binfo) + PEX_OFFSET));
 		dpaa2_fd_set_offset(&fd, (uint16_t)((bdp->len_offset_flag>>4)&0x0fff));
 		dpaa2_fd_set_bpid(&fd, priv->dpbp_attrs.bpid);
 		dpaa2_fd_set_len(&fd, (bdp->len_offset_flag>>16));
@@ -1526,7 +1526,7 @@ static int add_bufs(struct dpaa2_eth_priv *priv, u16 bpid)
 		paddr =  ioread32(array_addr);
 		paddr |=((uint64_t)(paddr&0xf)<<32);
 		paddr = (paddr & 0xfffffffffffffff0);
-		paddr = 0x1400000000 + paddr;
+		paddr = PEX_OFFSET + paddr;
 		buf_array[i] = paddr;
 		array_addr = array_addr + 0x04;
 #endif /* FSLU_NVME_INIC_DPAA2 */
@@ -3016,6 +3016,7 @@ static int setup_dpni(struct fsl_mc_device *ls_dev)
 	}
 
 	/* TODO: keep these prints for debug. Remove them in the future */
+	#if 0
 	dev_info(dev, "attributes: options = %08x\n", priv->dpni_attrs.options);
 	dev_info(dev, "attributes: num_queues = %d\n", priv->dpni_attrs.num_queues);
 	dev_info(dev, "attributes: num_tcs = %d\n", priv->dpni_attrs.num_tcs);
@@ -3025,7 +3026,7 @@ static int setup_dpni(struct fsl_mc_device *ls_dev)
 	dev_info(dev, "attributes: fs_entries = %d\n", priv->dpni_attrs.fs_entries);
 	dev_info(dev, "attributes: qos_key_size = %d\n", priv->dpni_attrs.qos_key_size);
 	dev_info(dev, "attributes: fs_key_size = %d\n", priv->dpni_attrs.fs_key_size);
-
+	#endif
 	/* Update number of logical FQs in netdev */
 	err = netif_set_real_num_tx_queues(net_dev,
 			dpaa2_eth_queue_count(priv));
@@ -3153,7 +3154,7 @@ static int setup_rx_flow(struct dpaa2_eth_priv *priv,
 		return err;
 	}
 
-	dev_info(dev, "Rx q->fqid %08x\n", qid.fqid);
+	//dev_info(dev, "Rx q->fqid %08x\n", qid.fqid); /*m*/
 	fq->fqid = qid.fqid;
 
 	q.destination.id = fq->channel->dpcon_id;
@@ -3195,7 +3196,7 @@ static int setup_tx_flow(struct dpaa2_eth_priv *priv,
 		return err;
 	}
 
-	dev_info(dev, "Tx q->fqid %08x q->qdbin %08x\n", qid.fqid, qid.qdbin);
+	//dev_info(dev, "Tx q->fqid %08x q->qdbin %08x\n", qid.fqid, qid.qdbin); /*m*/
 	fq->tx_qdbin = qid.qdbin;
 
 	err = dpni_get_queue(priv->mc_io, 0, priv->mc_token,
@@ -3205,7 +3206,7 @@ static int setup_tx_flow(struct dpaa2_eth_priv *priv,
 		return err;
 	}
 
-	dev_info(dev, "Txc q->fqid %08x\n", qid.fqid);
+	//dev_info(dev, "Txc q->fqid %08x\n", qid.fqid); /*m*/
 	fq->fqid = qid.fqid;
 
 	q.destination.id = fq->channel->dpcon_id;
@@ -3906,13 +3907,12 @@ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
 			printk("PEX3 iormap failed\n");
 			return -ENOMEM;
 		}
-
-
+		
 		iowrite32(0x1, (global->pci_config + 0x8bc));/*enable read write*/
-		iowrite32(0x0, (global->pci_config + 0x807f8));/*PF's related*/
+		iowrite32(0x0, (global->pci_config + 0x507f8));/*PF's related*/
 
-		/*outbound mapings moved to u-boot level*/
-#if 1
+		/*outbound mapings can be moved to u-boot level*/
+#if 1 
 		/*outbound of whole x86 RAM 4GB*/
 		iowrite32(0x00000002, (global->pci_config + 0x900));/*set outbound region2 as current region*/
 		iowrite32(0x00000000, (global->pci_config + 0x90c));/*set lower  address*/
@@ -3933,7 +3933,6 @@ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
 		iowrite32(0x00000000,(global->pci_config + 0x904));
 		iowrite32(0x80000000,(global->pci_config + 0x908));
 #endif
-
 		iowrite32(0x80000000, (global->pci_config + 0x900));
 		iowrite32(0x08000000, (global->pci_config + 0x918));
 		iowrite32(0x00000000, (global->pci_config + 0x91c));
@@ -3946,11 +3945,12 @@ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
 			err= -ENOMEM;
 			goto err_dma_alloc;
 		}
-		memset(&global->dma_virt, 0, SHARED_CONF_SIZE);
+		
+		memset(global->dma_virt, 0, SHARED_CONF_SIZE);
 		global->dma_bkp = global->dma_handle;
 		global->dma_handle = PTR_ALIGN(global->dma_handle,0x4000000);
 		global->dma_virt =  (void *) ((unsigned long) (global->dma_virt) + (global->dma_handle - global->dma_bkp));
-
+		
 		iowrite32(0x80000002, (global->pci_config + 0x900));
 		iowrite32((global->dma_handle & 0xffffffff), (global->pci_config + 0x918));
 		iowrite32((global->dma_handle >> 32), (global->pci_config + 0x91c));
@@ -3964,7 +3964,7 @@ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
 			goto err_ccsr_ioremap;
 		}
 
-		global->pci_outbound=(uint64_t)ioremap_nocache(0x1400000000,0x1ffffffff);
+		global->pci_outbound=(uint64_t)ioremap_nocache(PEX_OFFSET,0x7ffffffff);
 		if (!global->pci_outbound) {
 			printk("PEX3 iormap failed\n");
 			err= -ENOMEM;
@@ -3993,7 +3993,6 @@ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
 		}
 
 #endif/*FSLU_NVME_INIC_QDMA*/
-
 
 	}
 #endif

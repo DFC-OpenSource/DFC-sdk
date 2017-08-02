@@ -123,16 +123,16 @@ static int outbound_config(void)
 		return -1;
 	}
 	for(i = 0;i < 8; i++) {
-		writel(1, reg_vir + DBI_REG);		
-		writel(0x00000002 + i, reg_vir + INDEX_REG);
+		writel(1, reg_vir + DBI_REG);
+		writel(0x2 + i, reg_vir + INDEX_REG);
 		writel(0xffffffff, reg_vir + ADD_RANGE_REG);
 		writel(0x00000000, reg_vir + TARGET_ADD_LOW);
-		writel(0x00000000, reg_vir + TARGET_ADD_HIGH);
+		writel(0x0 + i, reg_vir + TARGET_ADD_HIGH);
 		writel(0x00000000, reg_vir + BASE_ADD_LOW);
 		writel(0x30 + i, reg_vir + BASE_ADD_HIGH);	
 		writel(0, reg_vir + CONTROL1_REG);
 		writel(0x80000000, reg_vir + CONTROL2_REG);
-		writel(0, reg_vir + DBI_REG);		
+		writel(0, reg_vir + DBI_REG);
 	}
 	iounmap(reg_vir);
 	return 0;
