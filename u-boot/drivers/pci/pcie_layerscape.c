@@ -750,7 +750,7 @@ int ls_pcie_init_ctrl(int busno, enum srds_prtcl dev, struct ls_pcie_info *info)
 #endif
 #endif
 	}else{
-		ls_pcie_setup_ctrl(pcie, info);
+		//ls_pcie_setup_ctrl(pcie, info);
 	}
 	
 	linkup = ls_pcie_link_up(pcie);
