@@ -331,6 +331,7 @@ static int ls_pcie_link_up(struct pcie_port *pp)
 	struct ls_pcie *pcie = to_ls_pcie(pp);
 	u32 state, offset;
 
+	mdelay(10);
 	if (of_get_property(pp->dev->of_node, "fsl,lut_diff", NULL))
 		offset = 0x407fc;
 	else
@@ -363,7 +364,7 @@ static void ls_pcie_host_init(struct pcie_port *pp)
 	ls_pcie_drop_msg_tlp(pcie);
 	iowrite32(0, pcie->dbi + PCIE_DBI_RO_WR_EN);
 
-	ls_pcie_disable_bars(pcie);
+	//ls_pcie_disable_bars(pcie);
 	ls_pcie_disable_outbound_atus(pcie);
 	ls_pcie_fix_error_response(pcie);
 }
