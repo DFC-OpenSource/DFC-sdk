@@ -83,9 +83,9 @@
 #define PCIE_PF_NUM		2
 #define PCIE_VF_NUM		64
 
-#define PCIE_BAR0_SIZE		(4 * 1024) /* 4K */
-#define PCIE_BAR1_SIZE		(8 * 1024) /* 8K for MSIX */
-#define PCIE_BAR2_SIZE		(4 * 1024) /* 4K */
+#define PCIE_BAR0_SIZE		(4 * 1024 * 1024) /* 4M */
+#define PCIE_BAR1_SIZE		(16 * 1024) /* 16K for MSIX */
+#define PCIE_BAR2_SIZE		(16	* 1024* 1024) /* 4K */
 #define PCIE_BAR4_SIZE		(1 * 1024 * 1024) /* 1M */
 
 struct ls_pcie {
@@ -584,9 +584,15 @@ int ls_pcie_init_ctrl(int busno, enum srds_prtcl dev, struct ls_pcie_info *info)
 
 	if (ep_mode){
 #if 1
-	writel(0x00000001, 0x36008bc);
+		writel(0x00000001, 0x36008bc);
 
+		writel(0x00000001,0x3601010);
+		writel(0x0,0x3600010);
+		writel(0x00001FFF,0x3601010);
+		writel(0x00000001,0x3601014);
 		writel(0x0,0x3601014);
+		writel(0x00003FFF,0x3601014);
+
 		writel(0x0,0x3601018);
 		writel(0x0,0x360101c);
 		writel(0x0,0x3601020);
@@ -598,16 +604,15 @@ int ls_pcie_init_ctrl(int busno, enum srds_prtcl dev, struct ls_pcie_info *info)
 		writel(0x0,0x36011ac);
 		writel(0x0,0x36011b0);
 		writel(0x0,0x3600180);
-		writel(0x00000001,0x3601010);
-		writel(0x0,0x3600010);
-		writel(0x00001FFF,0x3601010);
-		writel(0x00000001,0x3601014);
-		writel(0x0,0x3601014);
-		writel(0x00003FFF,0x3601014);
 
+		writel(0x00000001,0x3621010);
+		writel(0x0,0x3621010);
+		writel(0x003FFFFF,0x3621010);
+		writel(0x00000001,0x3621014);
+		writel(0x0,0x3620014);
+		writel(0x00003FFF,0x3621014);
+		writel(0x00FFFFFF,0x3621018);
 
-		writel(0x0,0x3621014);
-		writel(0x0,0x3621018);
 		writel(0x0,0x362101c);
 		writel(0x0,0x3621020);
 		writel(0x0,0x3621030);
@@ -618,17 +623,22 @@ int ls_pcie_init_ctrl(int busno, enum srds_prtcl dev, struct ls_pcie_info *info)
 		writel(0x0,0x36211ac);
 		writel(0x0,0x36211b0);
 		writel(0x0,0x3620180);
-		writel(0x00000001,0x3621010);
-		writel(0x0,0x3621010);
-		writel(0x003FFFFF,0x3621010);
-		writel(0x00000001,0x3621014);
-		writel(0x0,0x3620014);
-		writel(0x00003FFF,0x3621014);
-		writel(0x00000001,0x3621018);
-		writel(0x0,0x3620018);
-		writel(0x00FFFFFF,0x3621018);
 
 		writel(0x00000000, 0x36008bc);
+
+/* ATU 0 : OUTBOUND : map 4G MEM */
+		ls_pcie_iatu_outbound_set(pcie, PCIE_ATU_REGION_INDEX0,
+					  PCIE_ATU_TYPE_MEM,
+					  info->phys_base,
+					  0,
+					  4 * 1024 * 1024 * 1024ULL);
+/* ATU 1 : OUTBOUND : map 4G MEM */
+		ls_pcie_iatu_outbound_set(pcie, PCIE_ATU_REGION_INDEX1,
+					  PCIE_ATU_TYPE_MEM,
+					  info->phys_base + 0x100000000,
+					  0x100000000,
+					  4 * 1024 * 1024 * 1024ULL);
+
 #endif
 
 #if 0		/*BAR 0 data config*/
@@ -750,7 +760,7 @@ int ls_pcie_init_ctrl(int busno, enum srds_prtcl dev, struct ls_pcie_info *info)
 #endif
 #endif
 	}else{
-		//ls_pcie_setup_ctrl(pcie, info);
+		ls_pcie_setup_ctrl(pcie, info);
 	}
 	
 	linkup = ls_pcie_link_up(pcie);

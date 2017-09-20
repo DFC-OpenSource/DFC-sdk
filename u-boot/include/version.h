@@ -22,7 +22,7 @@
 	U_BOOT_TIME " " U_BOOT_TZ ")" CONFIG_IDENT_STRING
 
 #ifdef CONFIG_ISSD
-#define BOOTARG_BINARY_VER "ubootver=01.00.00 "
+#define BOOTARG_BINARY_VER "ubootver=02.00.00 "
 #define BOOTARG_BINARY_VER_SIZE sizeof(BOOTARG_BINARY_VER)
 #endif
 
