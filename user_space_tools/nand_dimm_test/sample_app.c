@@ -117,7 +117,7 @@ int main(int argc,char **argv)
 			/*Page Write- 16K + 1K OOB*/
 			lun = target =0;
 			va = virt_addr[1];
-			memset(va, 0xab, 0x4000);
+			memset(va, 0x00, 0x4000);
 			//memset((va+0x4000), 0xcd, 0x400); /*For OOB*/
 
 			/* To get Better throughput we are doing Multi-Plane operations in write.
