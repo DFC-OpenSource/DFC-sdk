@@ -83,7 +83,7 @@ int nand_page_prog(io_cmd *cmd_buf)
 	cmd_struct->len3_len2 = cmd_buf->len[3] << 16 | cmd_buf->len[2];
 	cmd_struct->oob_LSB = cmd_buf->host_addr[4] & 0xffffffff;
 	cmd_struct->oob_len_MSB = cmd_buf->len[4] << 20 | ((cmd_buf->host_addr[4] >>32) & 0xfffff);
-	if(fpga_version == 0xa7030400) {
+	if(fpga_version == 0xa7030500) {
 		if(!(cmd_buf->lun) && !(cmd_buf->target) && !(cmd_buf->block & 0x1)){
 			cmd_struct->control_fields = PAGE_PROG << 5 | (!(cmd_buf->block % 2)) << 4 | 4 << 1 | 0;
 		} else {
@@ -559,7 +559,7 @@ void init_dma_mgr ()
 	int i = 0;
 	uint32_t total_desc =0;
 	/*Based on Fpga Image version, DMA Table Offsets has been modified*/
-	if(fpga_version == 0xa7030400){
+	if(fpga_version == 0xa7030500){
 		for (i=0 ; i < CHIP_COUNT ;i++) {
 			csr[i] = (csr_reg *)(ctrl_reg_addr + (i * NAND_CSR_OFFSET)+0x1000);
 			table_sz[i] = (tblsz_reg *)(ctrl_reg_addr + (i * NAND_CSR_OFFSET) + TBL_SZ_SHIFT+0x1000);
@@ -580,7 +580,7 @@ void init_dma_mgr ()
 int mmap_fpga_regs(int mem_fd,uint64_t bar2_addr,uint64_t bar4_addr)
 {
 	int ret =0;
-	if(fpga_version == 0xa7030400){
+	if(fpga_version == 0xa7030500){
 		size[0] = 32; size[1] = 32;
 	} else if( fpga_version == 0x00020502){
 		size[0] = 4; size[1] = 8;
@@ -651,7 +651,7 @@ uint8_t read_bar_address()
 	fpga_version = (uint32_t)(*(ver_reg+7));
 
 	/*FPGA Image 03_00_04 is Having the "Sync Mode 2" support*/
-	if(fpga_version !=  0xa7030400 ){
+	if(fpga_version !=  0xa7030500 ){
 		for (i=0; i < MAX_BARS; i++) {
 			ret = get_address(1,i);
 			if(ret) {
@@ -697,7 +697,7 @@ uint8_t nand_dm_init()
 	}
 #endif
 	/*Passing respective BAR address to do mmap based on FPGA image Version*/ 
-	if(fpga_version == 0xa7030400) {
+	if(fpga_version == 0xa7030500) {
 		ret = mmap_fpga_regs(fd,bar_address[0][2],bar_address[0][4]);
 		CHIP_COUNT = 8;
 	} else if (fpga_version == 0x00020502){
@@ -740,7 +740,7 @@ uint8_t nand_dm_init()
 	/*Setting the feature to NAND_SYNC_MODE2 or ASYNC_MODE_5*/
 	uint16_t cds_1[4] = {1,0,0,0},cds_2[4]={1,0,0,0},async[4] = {5,0,0,0};
 	uint16_t en_odt[4]= {0x20,0,0,0},s_mode2[4]={0x22,0,0,0},s_mode1[4]= {0x21,0,0,0};
-	if(fpga_version == 0xa7030400){
+	if(fpga_version == 0xa7030500){
 		ret = nand_set_feature(0x10,0x4,&cds_1);
 		ret += nand_set_feature(0x80,0x4,&cds_2);
 		/*ret += nand_set_feature(0x2,0x4,&en_odt);*/
