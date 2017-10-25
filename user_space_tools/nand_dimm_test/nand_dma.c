@@ -83,20 +83,11 @@ int nand_page_prog(io_cmd *cmd_buf)
 	cmd_struct->len3_len2 = cmd_buf->len[3] << 16 | cmd_buf->len[2];
 	cmd_struct->oob_LSB = cmd_buf->host_addr[4] & 0xffffffff;
 	cmd_struct->oob_len_MSB = cmd_buf->len[4] << 20 | ((cmd_buf->host_addr[4] >>32) & 0xfffff);
-	if(fpga_version == 0xa7030500) {
 		if(!(cmd_buf->lun) && !(cmd_buf->target) && !(cmd_buf->block & 0x1)){
 			cmd_struct->control_fields = PAGE_PROG << 5 | (!(cmd_buf->block % 2)) << 4 | 4 << 1 | 0;
 		} else {
 			cmd_struct->control_fields = PAGE_PROG << 5 | (!(cmd_buf->block % 2)) << 4 | 0;
 		}
-	} else if( fpga_version == 0x00020502) {
-		if(!(cmd_buf->lun) && !(cmd_buf->target) ){
-			cmd_struct->control_fields = PAGE_PROG << 5 | (!(cmd_buf->block % 2)) << 4 | 4 << 1 | 0;
-		} else {
-			cmd_struct->control_fields = PAGE_PROG << 5 | (!(cmd_buf->block % 2)) << 4 | 0;
-		}
-
-	}
 	make_desc(cmd_struct,cmd_buf->chip,WRITE,cmd_buf);
 
 	free(cmd_struct);
@@ -521,7 +512,7 @@ static void setup_nand_desc_array ()
 	int i = 0,j,k=0;
 	uint8_t *dma_table ;
 
-	memset(virt_addr[3], 0, 1024*getpagesize());
+	//memset(virt_addr[3], 0, 1024*getpagesize());
 	for(j=0;j<CHIP_COUNT;j++){
 		/*table = desc_tbl_addr + (j * TABLE_SHIFT)+0x10000;*/
 		dma_table = table[j];
@@ -559,32 +550,19 @@ void init_dma_mgr ()
 	int i = 0;
 	uint32_t total_desc =0;
 	/*Based on Fpga Image version, DMA Table Offsets has been modified*/
-	if(fpga_version == 0xa7030500){
 		for (i=0 ; i < CHIP_COUNT ;i++) {
 			csr[i] = (csr_reg *)(ctrl_reg_addr + (i * NAND_CSR_OFFSET)+0x1000);
 			table_sz[i] = (tblsz_reg *)(ctrl_reg_addr + (i * NAND_CSR_OFFSET) + TBL_SZ_SHIFT+0x1000);
 			table[i] = desc_tbl_addr + (i * NAND_TBL_OFFSET)+ 0x10000;
 			nand_gpio_int = ctrl_reg_addr + 0x4001;
 		}
-	} else if(fpga_version == 0x00020502){
-		for (i=0 ; i < CHIP_COUNT ;i++) {
-			csr[i] = (csr_reg *)(ctrl_reg_addr + (i * NAND_CSR_OFFSET));
-			table_sz[i] = (tblsz_reg *)(ctrl_reg_addr + (i * NAND_CSR_OFFSET) + TBL_SZ_SHIFT);
-			table[i] = desc_tbl_addr + (i * NAND_TBL_OFFSET);
-			nand_gpio_int = ctrl_reg_addr + 0x4001;
-		}
-	}
 	dma_default ();
 }
 
 int mmap_fpga_regs(int mem_fd,uint64_t bar2_addr,uint64_t bar4_addr)
 {
 	int ret =0;
-	if(fpga_version == 0xa7030500){
-		size[0] = 32; size[1] = 32;
-	} else if( fpga_version == 0x00020502){
-		size[0] = 4; size[1] = 8;
-	}
+	size[0] = 32; size[1] = 32;
 	desc_tbl_addr = mmap(0, size[0]*getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, bar2_addr);
 	if (desc_tbl_addr == MAP_FAILED) {
 		perror("mmap:");
@@ -650,15 +628,6 @@ uint8_t read_bar_address()
 
 	fpga_version = (uint32_t)(*(ver_reg+7));
 
-	/*FPGA Image 03_00_04 is Having the "Sync Mode 2" support*/
-	if(fpga_version !=  0xa7030500 ){
-		for (i=0; i < MAX_BARS; i++) {
-			ret = get_address(1,i);
-			if(ret) {
-				perror("Get_Bar_Addr:");
-			}
-		}
-	}
 	return SUCCESS;
 }
 
@@ -676,38 +645,8 @@ uint8_t nand_dm_init()
 		return FAILURE;
 	}
 /* This part of Version Check is included in sample app*/
-#if 0	
-	ver_reg = (uint32_t*)mmap(0, getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0x1246020000);
-	if (ver_reg == MAP_FAILED) {
-		perror("mmap:");
-		ret = errno;
-	}
-	version = (uint32_t)(*(ver_reg+7));
-
-	/*FPGA Image 03_00_04 is Having the "Sync Mode 2" support*/
-	if(version !=  0x00030301){
-		printf("NAND LIBRARY won't support this FPGA image : %x, Supported FPGA version: 03.00.04 \n",version);
-		return FAILURE;
-	}
-
-	munmap(ver_reg,getpagesize());
-	if(fpga_version !=  0x00030301){
-		printf("NAND LIBRARY won't support this FPGA image : %x, Supported FPGA version: 03.00.04 \n",fpga_version);
-		return FAILURE;
-	}
-#endif
-	/*Passing respective BAR address to do mmap based on FPGA image Version*/ 
-	if(fpga_version == 0xa7030500) {
 		ret = mmap_fpga_regs(fd,bar_address[0][2],bar_address[0][4]);
 		CHIP_COUNT = 8;
-	} else if (fpga_version == 0x00020502){
-		ret = mmap_fpga_regs(fd,bar_address[1][2],bar_address[1][4]);
-		CHIP_COUNT = 8;
-	} else {
-                printf("This FPGA image %02x.%02x.%02x is not supported. Upgrade to 03.00.04 or 02.05.02 image version\n", 
-                        fpga_version & 0x00FF0000, fpga_version & 0x0000FF00, fpga_version & 0x000000FF);
-		return FAILURE;
-        }
 	if(ret) {
 		perror("mmap failed:");
 		return FAILURE;
@@ -738,18 +677,9 @@ uint8_t nand_dm_init()
 	}
 
 	/*Setting the feature to NAND_SYNC_MODE2 or ASYNC_MODE_5*/
-	uint16_t cds_1[4] = {1,0,0,0},cds_2[4]={1,0,0,0},async[4] = {5,0,0,0};
+	uint16_t cds_1[4] = {0,0,0,0},cds_2[4]={0,0,0,0},async[4] = {5,0,0,0};
 	uint16_t en_odt[4]= {0x20,0,0,0},s_mode2[4]={0x22,0,0,0},s_mode1[4]= {0x21,0,0,0};
-	if(fpga_version == 0xa7030500){
-		ret = nand_set_feature(0x10,0x4,&cds_1);
-		ret += nand_set_feature(0x80,0x4,&cds_2);
-		/*ret += nand_set_feature(0x2,0x4,&en_odt);*/
-		/*ret += nand_set_feature(0x1,0x4,&s_mode2);*/
-		ret += nand_set_feature(0x1,0x4,&s_mode1);
-	}else if(fpga_version == 0x00020502) {
-		ret = nand_set_feature(0x1,0x4,&async);
-	}
-
+			ret += nand_set_feature(0x1,0x4,&s_mode1);
 	if(ret) {
 		perror("NAND_SET_FEATURE:");
 		return FAILURE;
