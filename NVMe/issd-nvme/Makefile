@@ -13,6 +13,11 @@ CFLAGS += -Wno-packed-bitfield-compat
 #CFLAGS += -Wno-unused-function
 SRCS=*.c
 
+TARGET1 = flash_mgnt_app
+CFLAGS1 = -pthread
+CFLAGS1 += -lrt
+CFLAGS1 += -D_GNU_SOURCE
+SRCS1=  sd_card_app/msg_app.c
 
 FTL= bdbm_ftl/params.c  bdbm_ftl/platform.c bdbm_ftl/ioctl.c bdbm_ftl/kmain.c bdbm_ftl/hlm_nobuf.c bdbm_ftl/host_block.c bdbm_ftl/llm_noq.c bdbm_ftl/dm_dragonfire.c bdbm_ftl/dev_dragonfire.c bdbm_ftl/ftl/abm.c bdbm_ftl/ftl/page_ftl.c
 #CC = gcc -g -Wno-packed-bitfield-compat
@@ -34,15 +39,19 @@ help:
 
 fslustdalone:
 	$(CC) $(SRCS) $(FTL) $(CFLAGS) -L ./ -DGET_CMD_STATUS -DCUR_SETUP=STANDALONE_SETUP -DBIO_MEMTYPE=NVME_BIO_TWO libqdma.so -o issd_nvme_stda
+	$(CC) $(SRCS1) -o $(TARGET1) $(CFLAGS1)
 
 fsluddr:
 	$(CC) $(SRCS) $(FTL) $(CFLAGS) -DCUR_SETUP=TARGET_SETUP -DBIO_MEMTYPE=NVME_BIO_DDR -o $(TARGET)
+	$(CC) $(SRCS1) -o $(TARGET1) $(CFLAGS1)
 
 fslunand:
 	$(CC) $(SRCS) $(FTL) $(CFLAGS) -DCMD_STATUS_DESC -DNEW_DF_CARD -DCUR_SETUP=TARGET_SETUP -DBIO_MEMTYPE=NVME_BIO_NAND -o $(TARGET)
+	$(CC) $(SRCS1) -o $(TARGET1) $(CFLAGS1)
 
 fsluissd:
 	$(CC) $(SRCS) $(FTL) $(CFLAGS) -L ./ -DCUR_SETUP=TARGET_SETUP -DBIO_MEMTYPE=NVME_BIO_TWO libqdma.so -o $(TARGET)
+	$(CC) $(SRCS1) -o $(TARGET1) $(CFLAGS1)
 
 clean:
-	rm -rf *.o $(TARGET)
+	rm -rf *.o $(TARGET) $(TARGET1)

@@ -415,7 +415,7 @@ skip_deinit:
 		}
 
 #endif
-		printf("\n\tSTORING FLASH MANAGEMENT INFO SUCCESS\t\n");
+		//printf("\n\tSTORING FLASH MANAGEMENT INFO SUCCESS\t\n");
 		ftl_stored = 1;
 		return 0;
 	skip_store:

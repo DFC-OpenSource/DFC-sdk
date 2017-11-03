@@ -671,6 +671,7 @@ typedef struct NvmeQSched {
 } NvmeQSched;
 
 typedef struct NvmeCtrl {
+	int fpga_version;
 	uint8_t		running;
 	int		fd_uio[2];
 	FpgaCtrl	fpga;
@@ -874,6 +875,8 @@ static inline int spin_unlock(pthread_spinlock_t *req_spin)
 
 extern int init_cli();
 extern int get_dimm_info(NvmeCtrl *n);
+extern int get_new_dimm_info(NvmeCtrl *n);
+extern int ns_check_valid(NvmeCtrl *n,int slot[]);
 int nvme_bio_init (NvmeCtrl *n);
 inline void nvme_bio_deinit (NvmeCtrl *n);
 void nvme_rw_cb (void *opaque, int ret);
