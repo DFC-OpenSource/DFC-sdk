@@ -210,13 +210,21 @@ static int bdbm_detect_dimms (bdbm_dimm_status_t *dimms, bdbm_device_params_t *n
 	int i;
 	dimms->nr_dimms = 0;
 	np->nr_channels = 0;
-
+	if (g_NvmeCtrl.fpga_version == 1){
+		for (i=2; i<4; i++) {
+		if (g_NvmeCtrl.dm[i]->valid) {
+			dimms->nr_dimms += 1;
+			np->nr_channels += 4;
+			}
+		}
+	} else {
 	for (i=0; i<2; i++) {
 		if (g_NvmeCtrl.dm[i*2]->valid) {
 			dimms->nr_dimms += 1;
 			np->nr_channels += 4;
 		}
 	}
+}
 
 	if (dimms->nr_dimms != 0) {
 		bdbm_read_nand_spd (np);

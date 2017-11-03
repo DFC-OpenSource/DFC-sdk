@@ -12,6 +12,8 @@
 /*#define DDR_CACHE*/
 #endif
 //#define QDMA 0x1	/* QDMA*/
+#define TAR
+#define UNTAR
 #define NVME_BIO_RAMDISK 0x01
 #define NVME_BIO_DDR     0x02
 #define NVME_BIO_NAND    0x04

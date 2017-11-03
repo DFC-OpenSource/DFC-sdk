@@ -91,13 +91,16 @@ int trace_fpga_im_info (NvmeCtrl *n)
 		return -1;
 	}
 	version = (uint32_t)(*(ver_reg+7));
-
+	
 	if(version ==  0x00020502 || version == 0x00020400 || version == 0x00020501){
+		n->fpga_version =0;
 		n->pex_count = 2;       
-	} else if (version == 0x00030100 || version == 0xa3030401) {
+	} else if (version == 0x00030100 || version == 0xa3030401 || version == 0xa3030501 || version == 0xa7030500 || version == 0xa3030500 || version == 0xa7030501 || version == 0xa3030502 || version == 0xa7030502 || version == 0xa7030600 || version == 0xa3030600) {
+		n->fpga_version =1;
 		n->pex_count = 1;
 	} else {
 		n->pex_count = 0;
+		printf(" ERROR:Unsupported FPGA image version");
 	}
 	total_eps = n->pex_count;
 
@@ -689,4 +692,3 @@ inline void delete_nvme_timer_fn (NvmeTimer **timer)
 		//*timer = NULL;
 	}
 }
-
