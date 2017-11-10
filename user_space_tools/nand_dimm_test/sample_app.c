@@ -142,10 +142,10 @@ int main(int argc,char **argv)
 								//cmd->len[4] = 0x400;    /*OOB length 1KB*/
 								/*phy_addr[1] = 0x15e4f00000;*/
 								cmd->page = page;
-								cmd->host_addr[0] = (uint64_t) phy_addr[0];
-								cmd->host_addr[1] = (uint64_t) ((uint8_t *)phy_addr[0]+0x1000);
-								cmd->host_addr[2] = (uint64_t) ((uint8_t *)phy_addr[0]+0x2000);
-								cmd->host_addr[3] = (uint64_t) ((uint8_t *)phy_addr[0]+0x3000);
+								cmd->host_addr[0] = (uint64_t) phy_addr[1];
+								cmd->host_addr[1] = (uint64_t) ((uint8_t *)phy_addr[1]+0x1000);
+								cmd->host_addr[2] = (uint64_t) ((uint8_t *)phy_addr[1]+0x2000);
+								cmd->host_addr[3] = (uint64_t) ((uint8_t *)phy_addr[1]+0x3000);
 								cmd->host_addr[4] = 0;
 								//cmd->host_addr[4] = (uint64_t) ((uint8_t *)phy_addr[1]+0x4000); /*OOB's source data_buffer*/
 
@@ -164,10 +164,10 @@ int main(int argc,char **argv)
 								//cmd->len[4] = 0x400;    /*OOB length 1KB*/
 
 								cmd->page = page;
-								cmd->host_addr[0] = (uint64_t) phy_addr[0];
-								cmd->host_addr[1] = (uint64_t) ((uint8_t *)phy_addr[0]+0x1000);
-								cmd->host_addr[2] = (uint64_t) ((uint8_t *)phy_addr[0]+0x2000);
-								cmd->host_addr[3] = (uint64_t) ((uint8_t *)phy_addr[0]+0x3000);
+								cmd->host_addr[0] = (uint64_t) phy_addr[1];
+								cmd->host_addr[1] = (uint64_t) ((uint8_t *)phy_addr[1]+0x1000);
+								cmd->host_addr[2] = (uint64_t) ((uint8_t *)phy_addr[1]+0x2000);
+								cmd->host_addr[3] = (uint64_t) ((uint8_t *)phy_addr[1]+0x3000);
 								cmd->host_addr[4] = 0;
 								//cmd->host_addr[4] = (uint64_t) ((uint8_t *)phy_addr[1]+0x4000);
 
