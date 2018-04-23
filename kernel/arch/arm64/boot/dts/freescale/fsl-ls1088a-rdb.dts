@@ -1,0 +1,88 @@
+/*
+ * Device Tree file for Freescale LS1088a RDB board
+ *
+ * Copyright (C) 2015, Freescale Semiconductor
+ *
+ * This file is licensed under the terms of the GNU General Public
+ * License version 2.  This program is licensed "as is" without any
+ * warranty of any kind, whether express or implied.
+ */
+
+/dts-v1/;
+
+#include "fsl-ls1088a.dtsi"
+
+/ {
+	model = "Freescale Layerscape 1088a RDB Board";
+	compatible = "fsl,ls1088a-rdb", "fsl,ls1088a";
+};
+
+&esdhc {
+	status = "okay";
+};
+
+&ifc {
+	status = "disabled";
+};
+
+&ftm0 {
+	status = "okay";
+};
+
+&i2c0 {
+	status = "okay";
+	pca9547@77 {
+		compatible = "nxp,pca9547";
+		reg = <0x77>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		i2c-mux-never-disable;
+	};
+};
+
+&i2c1 {
+	status = "disabled";
+};
+
+&i2c2 {
+	status = "disabled";
+};
+
+&i2c3 {
+	status = "disabled";
+};
+
+&dspi {
+	status = "disabled";
+};
+
+&qspi {
+	status = "okay";
+	qflash0: s25fs512s@0 {
+		compatible = "spansion,m25p80";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		spi-max-frequency = <20000000>;
+		reg = <0>;
+	};
+
+	qflash1: s25fs512s@1 {
+		compatible = "spansion,m25p80";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		spi-max-frequency = <20000000>;
+		reg = <1>;
+	};
+};
+
+&sata0 {
+	status = "okay";
+};
+
+&usb0 {
+	status = "okay";
+};
+
+&usb1 {
+	status = "okay";
+};
